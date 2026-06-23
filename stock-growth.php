@@ -1,147 +1,261 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/includes/data.php';
 
-[$fromDate, $toDate] = resolve_date_range();
-$fromDateOnly = substr($fromDate, 0, 10);
-$toDateOnly = substr($toDate, 0, 10);
+$page_title    = 'Stock Growth';
+$page_subtitle = 'Units received vs sold over time';
 
-$series = get_stock_growth_series($pdo, $bizId, $fromDate, $toDate);
-$topRestocked = get_top_restocked_products($pdo, $bizId, $fromDate, $toDate, 10);
+// Date range
+$default_from = date('Y-m-d', strtotime('-30 days'));
+$default_to   = date('Y-m-d');
+$from = isset($_GET['from']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from']) ? $_GET['from'] : $default_from;
+$to   = isset($_GET['to'])   && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'])   ? $_GET['to']   : $default_to;
+if ($from > $to) [$from, $to] = [$to, $from];
 
-$totalIn = array_sum(array_column($series, 'units_in'));
-$totalOut = array_sum(array_column($series, 'units_out'));
-$totalAdj = array_sum(array_column($series, 'adjustment'));
-$netChange = $totalIn - $totalOut + $totalAdj;
-$endingRunningTotal = end($series)['running_total'] ?? 0;
+try {
+    $rows      = get_stock_growth($from, $to);
+    $top       = get_top_restocked($from, $to);
+    $db_error  = null;
+} catch (Exception $e) {
+    $db_error  = $e->getMessage();
+    $rows      = [];
+    $top       = [];
+}
 
-$pageTitle = 'Stock Growth';
-$activePage = 'growth';
-require __DIR__ . '/includes/header.php';
+// Chart data
+$days   = json_encode(array_column($rows, 'day'));
+$recv   = json_encode(array_column($rows, 'received'));
+$sold   = json_encode(array_column($rows, 'sold'));
+$cumul  = json_encode(array_column($rows, 'cumulative'));
+
+$inline_scripts = <<<JS
+const days  = {$days};
+const recv  = {$recv};
+const sold  = {$sold};
+const cumul = {$cumul};
+
+// ── Bar chart: received vs sold ───────────────────────────────
+if (days.length) {
+    new Chart(document.getElementById('barChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: days,
+            datasets: [
+                {
+                    label: 'Received',
+                    data: recv,
+                    backgroundColor: 'rgba(13,59,142,.75)',
+                    borderRadius: 4
+                },
+                {
+                    label: 'Sold',
+                    data: sold,
+                    backgroundColor: 'rgba(249,115,22,.75)',
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'top' } },
+            scales: {
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 14, font: { size: 11 } } },
+                y: { beginAtZero: true, ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+
+    // ── Line chart: cumulative net ────────────────────────────
+    new Chart(document.getElementById('lineChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: days,
+            datasets: [{
+                label: 'Cumulative Net Change',
+                data: cumul,
+                borderColor: '#0d3b8e',
+                backgroundColor: 'rgba(13,59,142,.1)',
+                fill: true,
+                tension: .35,
+                pointRadius: days.length > 60 ? 0 : 3,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'top' } },
+            scales: {
+                x: { grid: { display: false }, ticks: { maxTicksLimit: 14, font: { size: 11 } } },
+                y: { ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+}
+JS;
+
+require_once __DIR__ . '/includes/header.php';
 ?>
 
-<div class="page-heading">Stock Growth</div>
-<div class="page-subheading">How your inventory levels changed over time — restocks vs. depletion.</div>
+<!-- ── Date filter ──────────────────────────────────────────── -->
+<form method="GET" action="" class="filter-bar">
+    <div>
+        <label>From</label>
+        <input type="date" name="from" class="form-control" value="<?= $from ?>" max="<?= $to ?>">
+    </div>
+    <div>
+        <label>To</label>
+        <input type="date" name="to" class="form-control" value="<?= $to ?>" min="<?= $from ?>">
+    </div>
+    <button type="submit" class="btn btn-primary-ck">
+        <i class="bi bi-funnel me-1"></i>Apply
+    </button>
+    <a href="stock-growth.php" class="btn btn-outline-secondary btn-sm align-self-end">Reset</a>
+</form>
 
-<?php require __DIR__ . '/includes/date-filter.php'; ?>
+<?php if ($db_error): ?>
+<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>
+    Database not connected: <?= htmlspecialchars($db_error) ?>
+</div>
+<?php endif; ?>
 
+<!-- ── Summary pills ───────────────────────────────────────── -->
+<?php if ($rows): ?>
+<?php
+    $total_recv = array_sum(array_column($rows, 'received'));
+    $total_sold = array_sum(array_column($rows, 'sold'));
+    $net        = end($rows)['cumulative'];
+?>
+<div class="d-flex flex-wrap gap-3 mb-4">
+    <div class="kpi-card blue p-3" style="min-width:160px">
+        <div class="kpi-icon blue"><i class="bi bi-arrow-down-circle"></i></div>
+        <div>
+            <p class="kpi-label">Total Received</p>
+            <p class="kpi-value"><?= number_format($total_recv) ?></p>
+        </div>
+    </div>
+    <div class="kpi-card orange p-3" style="min-width:160px">
+        <div class="kpi-icon orange"><i class="bi bi-arrow-up-circle"></i></div>
+        <div>
+            <p class="kpi-label">Total Sold</p>
+            <p class="kpi-value"><?= number_format($total_sold) ?></p>
+        </div>
+    </div>
+    <div class="kpi-card <?= $net >= 0 ? 'green' : 'red' ?> p-3" style="min-width:160px">
+        <div class="kpi-icon <?= $net >= 0 ? 'green' : 'red' ?>">
+            <i class="bi bi-<?= $net >= 0 ? 'graph-up' : 'graph-down' ?>"></i>
+        </div>
+        <div>
+            <p class="kpi-label">Net Change</p>
+            <p class="kpi-value"><?= ($net >= 0 ? '+' : '') . number_format($net) ?></p>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ── Charts ──────────────────────────────────────────────── -->
+<?php if ($rows): ?>
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="kpi-label">Units received</div>
-            <div class="kpi-value text-success"><?= format_number($totalIn) ?></div>
-            <div class="kpi-sub">Restocked in period</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="kpi-label">Units sold</div>
-            <div class="kpi-value" style="color:#e0a324;"><?= format_number($totalOut) ?></div>
-            <div class="kpi-sub">Depleted in period</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="kpi-label">Manual adjustments</div>
-            <div class="kpi-value"><?= ($totalAdj >= 0 ? '+' : '') . format_number($totalAdj) ?></div>
-            <div class="kpi-sub">Corrections, write-offs, etc.</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="kpi-label">Net change</div>
-            <div class="kpi-value <?= $netChange >= 0 ? 'trend-up' : 'trend-down' ?>">
-                <?= ($netChange >= 0 ? '+' : '') . format_number($netChange) ?>
+    <div class="col-lg-7">
+        <div class="dash-card">
+            <div class="dash-card-header">
+                <h6><i class="bi bi-bar-chart-fill me-2" style="color:var(--ck-blue)"></i>Daily Received vs Sold</h6>
             </div>
-            <div class="kpi-sub">Over selected period</div>
+            <div class="dash-card-body">
+                <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="dash-card">
+            <div class="dash-card-header">
+                <h6><i class="bi bi-graph-up me-2" style="color:var(--ck-blue)"></i>Cumulative Net Change</h6>
+            </div>
+            <div class="dash-card-body">
+                <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+            </div>
         </div>
     </div>
 </div>
+<?php else: ?>
+<div class="dash-card p-4 text-center text-muted mb-4">
+    <i class="bi bi-inbox fs-2 d-block mb-2"></i>No stock movement data for this period.
+</div>
+<?php endif; ?>
 
-<div class="panel mb-4">
-    <div class="panel-title">Daily stock movement</div>
-    <div class="panel-subtitle">Bars show daily in/out; the line tracks cumulative net change since the start of the period</div>
-    <canvas id="growthDetailChart" height="100"></canvas>
+<!-- ── Top restocked ────────────────────────────────────────── -->
+<div class="dash-card mb-4">
+    <div class="dash-card-header">
+        <h6><i class="bi bi-arrow-repeat me-2" style="color:var(--ck-orange)"></i>Most Restocked Products</h6>
+        <span class="badge" style="background:var(--ck-bg);color:var(--ck-blue);"><?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></span>
+    </div>
+    <div class="dash-card-body p-0">
+        <?php if (empty($top)): ?>
+            <p class="text-muted text-center py-4">No purchase data in this period.</p>
+        <?php else: ?>
+        <div class="table-responsive">
+            <table class="table dash-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Product</th>
+                        <th>Variation</th>
+                        <th class="text-end">Units Received</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($top as $i => $r): ?>
+                    <tr>
+                        <td class="text-muted"><?= $i + 1 ?></td>
+                        <td><?= htmlspecialchars($r['product']) ?></td>
+                        <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($r['variation']) ?></span></td>
+                        <td class="text-end fw-semibold"><?= number_format((float)$r['total_received']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
 </div>
 
-<div class="panel">
-    <div class="panel-title">Most restocked products</div>
-    <div class="panel-subtitle">By units received in this period</div>
-    <?php if (empty($topRestocked)): ?>
-        <p class="text-muted small mb-0">No purchases recorded in this period.</p>
-    <?php else: ?>
-        <table class="table table-sm table-low-stock mb-0">
-            <thead>
-            <tr>
-                <th>Product</th>
-                <th>SKU</th>
-                <th class="text-end">Units received</th>
-                <th class="text-end">Amount spent</th>
-            </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($topRestocked as $row): ?>
-                <tr>
-                    <td><?= htmlspecialchars($row['product_name']) ?></td>
-                    <td class="text-muted"><?= htmlspecialchars($row['product_sku']) ?></td>
-                    <td class="text-end"><?= format_number((float)$row['units_in']) ?></td>
-                    <td class="text-end"><?= format_kes((float)$row['amount_spent']) ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    <?php endif; ?>
+<!-- ── Daily breakdown table ────────────────────────────────── -->
+<?php if ($rows): ?>
+<div class="dash-card">
+    <div class="dash-card-header">
+        <h6><i class="bi bi-table me-2" style="color:var(--ck-blue)"></i>Daily Breakdown</h6>
+    </div>
+    <div class="dash-card-body p-0">
+        <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
+            <table class="table dash-table">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr>
+                        <th>Date</th>
+                        <th class="text-end">Received</th>
+                        <th class="text-end">Sold</th>
+                        <th class="text-end">Net</th>
+                        <th class="text-end">Cumulative</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach (array_reverse($rows) as $r): ?>
+                    <?php $net = $r['net']; ?>
+                    <tr>
+                        <td><?= $r['day'] ?></td>
+                        <td class="text-end"><?= number_format($r['received']) ?></td>
+                        <td class="text-end"><?= number_format($r['sold']) ?></td>
+                        <td class="text-end <?= $net > 0 ? 'text-success' : ($net < 0 ? 'text-danger' : 'text-muted') ?> fw-semibold">
+                            <?= ($net > 0 ? '+' : '') . number_format($net) ?>
+                        </td>
+                        <td class="text-end fw-semibold"><?= number_format($r['cumulative']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
+<?php endif; ?>
 
-<script>
-const labels = <?= json_encode(array_map(fn($r) => date('M j', strtotime($r['date'])), $series)) ?>;
-const unitsIn = <?= json_encode(array_map(fn($r) => $r['units_in'], $series)) ?>;
-const unitsOut = <?= json_encode(array_map(fn($r) => -$r['units_out'], $series)) ?>;
-const runningTotal = <?= json_encode(array_map(fn($r) => $r['running_total'], $series)) ?>;
-
-new Chart(document.getElementById('growthDetailChart'), {
-    data: {
-        labels: labels,
-        datasets: [
-            {
-                type: 'bar',
-                label: 'Received',
-                data: unitsIn,
-                backgroundColor: '#2bb673',
-                borderRadius: 3,
-                order: 2,
-            },
-            {
-                type: 'bar',
-                label: 'Sold',
-                data: unitsOut,
-                backgroundColor: '#e0a324',
-                borderRadius: 3,
-                order: 2,
-            },
-            {
-                type: 'line',
-                label: 'Cumulative net change',
-                data: runningTotal,
-                borderColor: '#ff6b5e',
-                backgroundColor: 'rgba(255,107,94,0.08)',
-                borderWidth: 2.5,
-                pointRadius: 0,
-                fill: false,
-                tension: 0.25,
-                order: 1,
-                yAxisID: 'y1',
-            }
-        ]
-    },
-    options: {
-        plugins: { legend: { position: 'bottom' } },
-        scales: {
-            x: { grid: { display: false }, stacked: true },
-            y: { grid: { color: '#eceef3' }, stacked: true, title: { display: true, text: 'Daily units' } },
-            y1: { position: 'right', grid: { display: false }, title: { display: true, text: 'Cumulative units' } }
-        }
-    }
-});
-</script>
-
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -1,119 +1,158 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/includes/data.php';
 
-$lowStock = get_low_stock_items($pdo, $bizId, 500);
-$outOfStock = get_out_of_stock_items($pdo, $bizId, 500);
+$page_title    = 'Low Stock Alerts';
+$page_subtitle = 'Variations at or below their alert threshold, plus out-of-stock items';
 
-$pageTitle = 'Low Stock Alerts';
-$activePage = 'low_stock';
-require __DIR__ . '/includes/header.php';
+try {
+    $low      = get_low_stock_items();
+    $out      = get_out_of_stock_items();
+    $db_error = null;
+} catch (Exception $e) {
+    $db_error = $e->getMessage();
+    $low      = [];
+    $out      = [];
+}
+
+require_once __DIR__ . '/includes/header.php';
 ?>
 
-<div class="page-heading">Low Stock Alerts</div>
-<div class="page-subheading">Items at or below their reorder point, and items already out of stock.</div>
+<?php if ($db_error): ?>
+<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>
+    Database not connected: <?= htmlspecialchars($db_error) ?>
+</div>
+<?php endif; ?>
 
+<!-- ── Summary banners ──────────────────────────────────────── -->
 <div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="kpi-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="kpi-label">Low stock items</div>
-                    <div class="kpi-value"><?= format_number(count($lowStock)) ?></div>
-                </div>
-                <div class="kpi-icon amber"><i class="bi bi-exclamation-triangle"></i></div>
+    <div class="col-sm-6">
+        <div class="kpi-card orange">
+            <div class="kpi-icon orange"><i class="bi bi-exclamation-triangle"></i></div>
+            <div>
+                <p class="kpi-label">Low Stock Items</p>
+                <p class="kpi-value"><?= number_format(count($low)) ?></p>
             </div>
-            <div class="kpi-sub">At or below alert quantity</div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="kpi-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="kpi-label">Out of stock items</div>
-                    <div class="kpi-value"><?= format_number(count($outOfStock)) ?></div>
-                </div>
-                <div class="kpi-icon coral"><i class="bi bi-x-octagon"></i></div>
+    <div class="col-sm-6">
+        <div class="kpi-card red">
+            <div class="kpi-icon red"><i class="bi bi-x-circle"></i></div>
+            <div>
+                <p class="kpi-label">Out of Stock</p>
+                <p class="kpi-value"><?= number_format(count($out)) ?></p>
             </div>
-            <div class="kpi-sub">Zero or negative quantity</div>
         </div>
     </div>
 </div>
 
-<div class="panel mb-4">
-    <div class="panel-title">Low stock</div>
-    <div class="panel-subtitle">Sorted by how close each item is to running out</div>
-    <?php if (empty($lowStock)): ?>
-        <p class="text-muted small mb-0">Nothing is below its alert quantity right now. Nice work.</p>
-    <?php else: ?>
+<!-- ── Low stock table ─────────────────────────────────────── -->
+<div class="dash-card mb-4">
+    <div class="dash-card-header">
+        <h6>
+            <i class="bi bi-exclamation-triangle-fill me-2" style="color:var(--ck-orange)"></i>
+            Low Stock — At or Below Alert Quantity
+        </h6>
+        <span class="badge rounded-pill" style="background:var(--ck-orange);color:#fff;">
+            <?= count($low) ?> items
+        </span>
+    </div>
+    <div class="dash-card-body p-0">
+        <?php if (empty($low)): ?>
+            <div class="text-center py-5">
+                <i class="bi bi-check-circle-fill text-success fs-2 d-block mb-2"></i>
+                <p class="text-muted mb-0">All items are above their alert threshold.</p>
+            </div>
+        <?php else: ?>
         <div class="table-responsive">
-        <table class="table table-sm table-low-stock mb-0">
-            <thead>
-            <tr>
-                <th>Product</th>
-                <th>Variation</th>
-                <th>SKU</th>
-                <th>Category</th>
-                <th class="text-end">On hand</th>
-                <th class="text-end">Alert at</th>
-                <th></th>
-            </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($lowStock as $row): ?>
-                <?php $qty = (float)$row['qty_available']; ?>
-                <tr>
-                    <td><?= htmlspecialchars($row['product_name']) ?></td>
-                    <td class="text-muted"><?= htmlspecialchars($row['variation_name']) ?></td>
-                    <td class="text-muted"><?= htmlspecialchars($row['variation_sku'] ?? $row['product_sku']) ?></td>
-                    <td class="text-muted"><?= htmlspecialchars($row['category_name'] ?? '—') ?></td>
-                    <td class="text-end fw-semibold"><?= format_number($qty) ?></td>
-                    <td class="text-end text-muted"><?= format_number((float)$row['alert_quantity']) ?></td>
-                    <td class="text-end">
-                        <?php if ($qty <= 0): ?>
-                            <span class="badge badge-stock-out">Out of stock</span>
-                        <?php else: ?>
-                            <span class="badge badge-stock-low">Low</span>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+            <table class="table dash-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Variation</th>
+                        <th>Category</th>
+                        <th class="text-center">Alert Qty</th>
+                        <th class="text-center">In Stock</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($low as $r): ?>
+                    <?php
+                        $qty   = (float)$r['qty'];
+                        $alert = (float)$r['alert_quantity'];
+                        $pct   = $alert > 0 ? round(($qty / $alert) * 100) : 100;
+                    ?>
+                    <tr>
+                        <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
+                        <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($r['variation']) ?></span></td>
+                        <td><?= htmlspecialchars($r['category'] ?? '—') ?></td>
+                        <td class="text-center"><?= number_format($alert) ?></td>
+                        <td class="text-center fw-bold <?= $qty <= 0 ? 'text-danger' : 'text-warning' ?>">
+                            <?= number_format($qty) ?>
+                        </td>
+                        <td class="text-center">
+                            <?php if ($qty <= 0): ?>
+                                <span class="badge badge-out">Out of Stock</span>
+                            <?php elseif ($pct <= 25): ?>
+                                <span class="badge badge-low">Critical</span>
+                            <?php else: ?>
+                                <span class="badge badge-low">Low</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
 </div>
 
-<div class="panel" id="out-of-stock">
-    <div class="panel-title">Out of stock</div>
-    <div class="panel-subtitle">All stock-tracked items currently at zero or negative quantity (includes items with no alert threshold set)</div>
-    <?php if (empty($outOfStock)): ?>
-        <p class="text-muted small mb-0">Everything is in stock.</p>
-    <?php else: ?>
+<!-- ── Out of stock table ──────────────────────────────────── -->
+<div class="dash-card" id="out-of-stock">
+    <div class="dash-card-header">
+        <h6>
+            <i class="bi bi-x-circle-fill me-2 text-danger"></i>
+            Out of Stock
+        </h6>
+        <span class="badge rounded-pill bg-danger">
+            <?= count($out) ?> variations
+        </span>
+    </div>
+    <div class="dash-card-body p-0">
+        <?php if (empty($out)): ?>
+            <div class="text-center py-5">
+                <i class="bi bi-check-circle-fill text-success fs-2 d-block mb-2"></i>
+                <p class="text-muted mb-0">No out-of-stock items. Great job!</p>
+            </div>
+        <?php else: ?>
         <div class="table-responsive">
-        <table class="table table-sm table-low-stock mb-0">
-            <thead>
-            <tr>
-                <th>Product</th>
-                <th>Variation</th>
-                <th>SKU</th>
-                <th>Category</th>
-                <th class="text-end">On hand</th>
-            </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($outOfStock as $row): ?>
-                <tr>
-                    <td><?= htmlspecialchars($row['product_name']) ?></td>
-                    <td class="text-muted"><?= htmlspecialchars($row['variation_name']) ?></td>
-                    <td class="text-muted"><?= htmlspecialchars($row['variation_sku'] ?? $row['product_sku']) ?></td>
-                    <td class="text-muted"><?= htmlspecialchars($row['category_name'] ?? '—') ?></td>
-                    <td class="text-end fw-semibold text-danger"><?= format_number((float)$row['qty_available']) ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+            <table class="table dash-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Variation</th>
+                        <th>Category</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($out as $r): ?>
+                    <tr>
+                        <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
+                        <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($r['variation']) ?></span></td>
+                        <td><?= htmlspecialchars($r['category'] ?? '—') ?></td>
+                        <td class="text-center">
+                            <span class="badge badge-out">Out of Stock</span>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
 </div>
 
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

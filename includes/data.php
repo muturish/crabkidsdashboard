@@ -1,309 +1,258 @@
 <?php
-/**
- * Data access layer for the Stock Dashboard.
- *
- * Schema notes (UltimatePOS):
- * - `transactions` with type='purchase' + status='received'  -> confirmed stock-in headers
- * - `purchase_lines`                                          -> stock-in quantities per variation
- * - `transactions` with type='sell' + status='final'          -> confirmed sales headers
- * - `transaction_sell_lines`                                  -> stock-out quantities per variation
- * - `stock_adjustment_lines`                                  -> manual +/- corrections (qty can be negative)
- * - `variation_location_details.qty_available`                -> current snapshot of stock on hand
- * - `variations` -> `products` -> `categories`                 -> product naming/grouping
- *
- * All functions are read-only SELECT queries.
- */
+// ── KPI helpers ───────────────────────────────────────────────────────────────
 
-require_once __DIR__ . '/../config/database.php';
-
-/**
- * Top KPI cards: current stock on hand, stock value, items received and
- * sold in the selected period, and net stock change in that period.
- */
-function get_overview_kpis(PDO $pdo, int $businessId, string $fromDate, string $toDate): array
+function get_total_stock_value(): float
 {
-    // Current total units on hand (live snapshot, not date-filtered —
-    // this is "right now", regardless of the selected period).
-    $stmt = $pdo->prepare("
-        SELECT
-            COALESCE(SUM(vld.qty_available), 0) AS total_units,
-            COALESCE(SUM(vld.qty_available * v.default_purchase_price), 0) AS stock_value_cost,
-            COALESCE(SUM(vld.qty_available * v.default_sell_price), 0) AS stock_value_retail
+    $db  = get_db();
+    $bid = business_id();
+    $sql = "
+        SELECT COALESCE(SUM(vld.qty_available * pp.dpp_inc_tax), 0) AS val
         FROM variation_location_details vld
-        JOIN variations v ON v.id = vld.variation_id
-        JOIN products p ON p.id = vld.product_id
-        WHERE p.business_id = :business_id
-          AND p.is_inactive = 0
-    ");
-    $stmt->execute(['business_id' => $businessId]);
-    $stockNow = $stmt->fetch();
-
-    // Units received via purchases within the period
-    $stmt = $pdo->prepare("
-        SELECT COALESCE(SUM(pl.quantity), 0) AS units_in
-        FROM purchase_lines pl
-        JOIN transactions t ON t.id = pl.transaction_id
-        WHERE t.business_id = :business_id
-          AND t.type = 'purchase'
-          AND t.status = 'received'
-          AND t.transaction_date BETWEEN :from_date AND :to_date
-    ");
-    $stmt->execute(['business_id' => $businessId, 'from_date' => $fromDate, 'to_date' => $toDate]);
-    $unitsIn = (float) $stmt->fetch()['units_in'];
-
-    // Units sold within the period
-    $stmt = $pdo->prepare("
-        SELECT COALESCE(SUM(tsl.quantity - tsl.quantity_returned), 0) AS units_out
-        FROM transaction_sell_lines tsl
-        JOIN transactions t ON t.id = tsl.transaction_id
-        WHERE t.business_id = :business_id
-          AND t.type = 'sell'
-          AND t.status = 'final'
-          AND t.transaction_date BETWEEN :from_date AND :to_date
-    ");
-    $stmt->execute(['business_id' => $businessId, 'from_date' => $fromDate, 'to_date' => $toDate]);
-    $unitsOut = (float) $stmt->fetch()['units_out'];
-
-    // Net manual stock adjustments within the period (can be +/-)
-    $stmt = $pdo->prepare("
-        SELECT COALESCE(SUM(sal.quantity), 0) AS net_adjustment
-        FROM stock_adjustment_lines sal
-        JOIN transactions t ON t.id = sal.transaction_id
-        WHERE t.business_id = :business_id
-          AND t.transaction_date BETWEEN :from_date AND :to_date
-    ");
-    $stmt->execute(['business_id' => $businessId, 'from_date' => $fromDate, 'to_date' => $toDate]);
-    $netAdjustment = (float) $stmt->fetch()['net_adjustment'];
-
-    return [
-        'total_units_on_hand' => (float) $stockNow['total_units'],
-        'stock_value_cost'    => (float) $stockNow['stock_value_cost'],
-        'stock_value_retail'  => (float) $stockNow['stock_value_retail'],
-        'units_in'            => $unitsIn,
-        'units_out'           => $unitsOut,
-        'net_adjustment'      => $netAdjustment,
-        'net_stock_change'    => $unitsIn - $unitsOut + $netAdjustment,
-    ];
+        JOIN product_variations pv ON pv.id = vld.product_variation_id
+        JOIN purchase_lines pp ON pp.variation_id = pv.id
+        JOIN transactions t ON t.id = pp.transaction_id
+            AND t.type = 'purchase' AND t.status = 'received' AND t.business_id = :bid
+        WHERE vld.qty_available > 0
+    ";
+    return (float) $db->prepare($sql) && ($st = $db->prepare($sql)) && $st->execute([':bid' => $bid])
+        ? $st->fetchColumn()
+        : 0.0;
 }
 
-/**
- * Daily stock movement series for charting: units received, units sold,
- * net adjustment, and running cumulative net change, between two dates.
- */
-function get_stock_growth_series(PDO $pdo, int $businessId, string $fromDate, string $toDate): array
+function get_kpis(): array
 {
-    $stmt = $pdo->prepare("
-        SELECT DATE(t.transaction_date) AS day, COALESCE(SUM(pl.quantity), 0) AS units_in
+    $db  = get_db();
+    $bid = business_id();
+
+    // Total products
+    $st = $db->prepare("SELECT COUNT(*) FROM products WHERE business_id = :bid AND deleted_at IS NULL");
+    $st->execute([':bid' => $bid]);
+    $total_products = (int) $st->fetchColumn();
+
+    // Total variations in stock
+    $st = $db->prepare("
+        SELECT COUNT(DISTINCT pv.id)
+        FROM product_variations pv
+        JOIN variation_location_details vld ON vld.product_variation_id = pv.id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
+        WHERE vld.qty_available > 0
+    ");
+    $st->execute([':bid' => $bid]);
+    $in_stock = (int) $st->fetchColumn();
+
+    // Low stock count
+    $st = $db->prepare("
+        SELECT COUNT(DISTINCT pv.id)
+        FROM product_variations pv
+        JOIN variation_location_details vld ON vld.product_variation_id = pv.id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
+        WHERE vld.qty_available > 0 AND vld.qty_available <= p.alert_quantity
+    ");
+    $st->execute([':bid' => $bid]);
+    $low_stock = (int) $st->fetchColumn();
+
+    // Out of stock
+    $st = $db->prepare("
+        SELECT COUNT(DISTINCT pv.id)
+        FROM product_variations pv
+        JOIN variation_location_details vld ON vld.product_variation_id = pv.id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
+        WHERE vld.qty_available <= 0
+    ");
+    $st->execute([':bid' => $bid]);
+    $out_of_stock = (int) $st->fetchColumn();
+
+    // Total stock value
+    $st = $db->prepare("
+        SELECT COALESCE(SUM(vld.qty_available * pv.default_sell_price), 0)
+        FROM product_variations pv
+        JOIN variation_location_details vld ON vld.product_variation_id = pv.id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
+        WHERE vld.qty_available > 0
+    ");
+    $st->execute([':bid' => $bid]);
+    $stock_value = (float) $st->fetchColumn();
+
+    return compact('total_products', 'in_stock', 'low_stock', 'out_of_stock', 'stock_value');
+}
+
+// ── Stock by category ─────────────────────────────────────────────────────────
+
+function get_stock_by_category(): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    $st  = $db->prepare("
+        SELECT c.name AS category,
+               SUM(vld.qty_available) AS total_qty
+        FROM variation_location_details vld
+        JOIN product_variations pv ON pv.id = vld.product_variation_id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
+        JOIN categories c ON c.id = p.category_id
+        WHERE vld.qty_available > 0
+        GROUP BY c.id, c.name
+        ORDER BY total_qty DESC
+    ");
+    $st->execute([':bid' => $bid]);
+    return $st->fetchAll();
+}
+
+// ── Stock growth trend (daily) ────────────────────────────────────────────────
+
+function get_stock_growth(string $from, string $to): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $received = $db->prepare("
+        SELECT DATE(t.transaction_date) AS day, SUM(pl.quantity) AS qty
         FROM purchase_lines pl
         JOIN transactions t ON t.id = pl.transaction_id
-        WHERE t.business_id = :business_id
-          AND t.type = 'purchase'
-          AND t.status = 'received'
-          AND t.transaction_date BETWEEN :from_date AND :to_date
-        GROUP BY DATE(t.transaction_date)
+            AND t.type = 'purchase' AND t.status = 'received'
+            AND t.business_id = :bid
+            AND DATE(t.transaction_date) BETWEEN :from AND :to
+        GROUP BY day ORDER BY day
     ");
-    $stmt->execute(['business_id' => $businessId, 'from_date' => $fromDate, 'to_date' => $toDate]);
-    $inByDay = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $inByDay[$row['day']] = (float) $row['units_in'];
-    }
+    $received->execute([':bid' => $bid, ':from' => $from, ':to' => $to]);
+    $recv_map = array_column($received->fetchAll(), 'qty', 'day');
 
-    $stmt = $pdo->prepare("
+    $sold = $db->prepare("
         SELECT DATE(t.transaction_date) AS day,
-               COALESCE(SUM(tsl.quantity - tsl.quantity_returned), 0) AS units_out
-        FROM transaction_sell_lines tsl
-        JOIN transactions t ON t.id = tsl.transaction_id
-        WHERE t.business_id = :business_id
-          AND t.type = 'sell'
-          AND t.status = 'final'
-          AND t.transaction_date BETWEEN :from_date AND :to_date
-        GROUP BY DATE(t.transaction_date)
+               SUM(sl.quantity - COALESCE(sl.quantity_returned, 0)) AS qty
+        FROM transaction_sell_lines sl
+        JOIN transactions t ON t.id = sl.transaction_id
+            AND t.type = 'sell' AND t.status = 'final'
+            AND t.business_id = :bid
+            AND DATE(t.transaction_date) BETWEEN :from AND :to
+        GROUP BY day ORDER BY day
     ");
-    $stmt->execute(['business_id' => $businessId, 'from_date' => $fromDate, 'to_date' => $toDate]);
-    $outByDay = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $outByDay[$row['day']] = (float) $row['units_out'];
-    }
+    $sold->execute([':bid' => $bid, ':from' => $from, ':to' => $to]);
+    $sold_map = array_column($sold->fetchAll(), 'qty', 'day');
 
-    $stmt = $pdo->prepare("
-        SELECT DATE(t.transaction_date) AS day, COALESCE(SUM(sal.quantity), 0) AS net_adjustment
-        FROM stock_adjustment_lines sal
-        JOIN transactions t ON t.id = sal.transaction_id
-        WHERE t.business_id = :business_id
-          AND t.transaction_date BETWEEN :from_date AND :to_date
-        GROUP BY DATE(t.transaction_date)
-    ");
-    $stmt->execute(['business_id' => $businessId, 'from_date' => $fromDate, 'to_date' => $toDate]);
-    $adjByDay = [];
-    foreach ($stmt->fetchAll() as $row) {
-        $adjByDay[$row['day']] = (float) $row['net_adjustment'];
-    }
-
-    // Build a continuous day-by-day series so the chart has no gaps
-    $series = [];
-    $cursor = new DateTime(substr($fromDate, 0, 10));
-    $end = new DateTime(substr($toDate, 0, 10));
-    $running = 0.0;
-
+    // Build a day-by-day series
+    $days   = [];
+    $cursor = new DateTime($from);
+    $end    = new DateTime($to);
     while ($cursor <= $end) {
-        $day = $cursor->format('Y-m-d');
-        $in = $inByDay[$day] ?? 0.0;
-        $out = $outByDay[$day] ?? 0.0;
-        $adj = $adjByDay[$day] ?? 0.0;
-        $net = $in - $out + $adj;
-        $running += $net;
-
-        $series[] = [
-            'date'        => $day,
-            'units_in'    => $in,
-            'units_out'   => $out,
-            'adjustment'  => $adj,
-            'net_change'  => $net,
-            'running_total' => $running,
-        ];
-
+        $days[] = $cursor->format('Y-m-d');
         $cursor->modify('+1 day');
     }
 
-    return $series;
+    $rows       = [];
+    $cumulative = 0;
+    foreach ($days as $day) {
+        $r           = (float)($recv_map[$day] ?? 0);
+        $s           = (float)($sold_map[$day] ?? 0);
+        $net         = $r - $s;
+        $cumulative += $net;
+        $rows[]      = ['day' => $day, 'received' => $r, 'sold' => $s, 'net' => $net, 'cumulative' => $cumulative];
+    }
+    return $rows;
 }
 
-/**
- * Stock on hand broken down by category, for a bar/pie chart.
- */
-function get_stock_by_category(PDO $pdo, int $businessId): array
-{
-    $stmt = $pdo->prepare("
-        SELECT
-            COALESCE(c.name, 'Uncategorized') AS category_name,
-            COALESCE(SUM(vld.qty_available), 0) AS total_units,
-            COALESCE(SUM(vld.qty_available * v.default_purchase_price), 0) AS stock_value_cost
-        FROM variation_location_details vld
-        JOIN variations v ON v.id = vld.variation_id
-        JOIN products p ON p.id = vld.product_id
-        LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.business_id = :business_id
-          AND p.is_inactive = 0
-        GROUP BY c.id, c.name
-        ORDER BY total_units DESC
-    ");
-    $stmt->execute(['business_id' => $businessId]);
-    return $stmt->fetchAll();
-}
+// ── Most restocked products ───────────────────────────────────────────────────
 
-/**
- * Top products by units received (restocked) within the period —
- * shows what's actively growing in stock.
- */
-function get_top_restocked_products(PDO $pdo, int $businessId, string $fromDate, string $toDate, int $limit = 10): array
+function get_top_restocked(string $from, string $to, int $limit = 10): array
 {
-    $stmt = $pdo->prepare("
-        SELECT
-            p.name AS product_name,
-            p.sku AS product_sku,
-            COALESCE(SUM(pl.quantity), 0) AS units_in,
-            COALESCE(SUM(pl.quantity * pl.purchase_price), 0) AS amount_spent
+    $db  = get_db();
+    $bid = business_id();
+    $st  = $db->prepare("
+        SELECT p.name AS product,
+               COALESCE(pv.name, 'Default') AS variation,
+               SUM(pl.quantity) AS total_received
         FROM purchase_lines pl
+        JOIN product_variations pv ON pv.id = pl.variation_id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
         JOIN transactions t ON t.id = pl.transaction_id
-        JOIN products p ON p.id = pl.product_id
-        WHERE t.business_id = :business_id
-          AND t.type = 'purchase'
-          AND t.status = 'received'
-          AND t.transaction_date BETWEEN :from_date AND :to_date
-        GROUP BY p.id, p.name, p.sku
-        ORDER BY units_in DESC
-        LIMIT :limit
+            AND t.type = 'purchase' AND t.status = 'received'
+            AND DATE(t.transaction_date) BETWEEN :from AND :to
+        GROUP BY pv.id
+        ORDER BY total_received DESC
+        LIMIT :lim
     ");
-    $stmt->bindValue('business_id', $businessId, PDO::PARAM_INT);
-    $stmt->bindValue('from_date', $fromDate);
-    $stmt->bindValue('to_date', $toDate);
-    $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    $st->bindValue(':bid',  $bid,   PDO::PARAM_INT);
+    $st->bindValue(':from', $from,  PDO::PARAM_STR);
+    $st->bindValue(':to',   $to,    PDO::PARAM_STR);
+    $st->bindValue(':lim',  $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
 }
 
-/**
- * Products at or below their alert quantity — the low-stock alert list.
- * Sums qty_available across all locations per variation.
- */
-function get_low_stock_items(PDO $pdo, int $businessId, int $limit = 200): array
+// ── Low-stock & out-of-stock ──────────────────────────────────────────────────
+
+function get_low_stock_items(): array
 {
-    $stmt = $pdo->prepare("
-        SELECT
-            p.id AS product_id,
-            p.name AS product_name,
-            p.sku AS product_sku,
-            v.id AS variation_id,
-            v.name AS variation_name,
-            v.sub_sku AS variation_sku,
-            p.alert_quantity,
-            COALESCE(SUM(vld.qty_available), 0) AS qty_available,
-            c.name AS category_name
-        FROM variations v
-        JOIN products p ON p.id = v.product_id
+    $db  = get_db();
+    $bid = business_id();
+    $st  = $db->prepare("
+        SELECT p.name AS product,
+               COALESCE(pv.name, 'Default') AS variation,
+               SUM(vld.qty_available) AS qty,
+               p.alert_quantity,
+               c.name AS category
+        FROM product_variations pv
+        JOIN variation_location_details vld ON vld.product_variation_id = pv.id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
         LEFT JOIN categories c ON c.id = p.category_id
-        LEFT JOIN variation_location_details vld ON vld.variation_id = v.id
-        WHERE p.business_id = :business_id
-          AND p.is_inactive = 0
-          AND p.enable_stock = 1
-          AND p.alert_quantity IS NOT NULL
-        GROUP BY v.id, p.id, p.name, p.sku, v.name, v.sub_sku, p.alert_quantity, c.name
-        HAVING qty_available <= p.alert_quantity
-        ORDER BY qty_available ASC
-        LIMIT :limit
+        WHERE vld.qty_available > 0 AND vld.qty_available <= p.alert_quantity
+        GROUP BY pv.id
+        ORDER BY qty ASC
     ");
-    $stmt->bindValue('business_id', $businessId, PDO::PARAM_INT);
-    $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    $st->execute([':bid' => $bid]);
+    return $st->fetchAll();
 }
 
-/**
- * Items that are completely out of stock (qty_available <= 0),
- * regardless of whether an alert_quantity is configured.
- */
-function get_out_of_stock_items(PDO $pdo, int $businessId, int $limit = 200): array
+function get_out_of_stock_items(): array
 {
-    $stmt = $pdo->prepare("
-        SELECT
-            p.id AS product_id,
-            p.name AS product_name,
-            p.sku AS product_sku,
-            v.id AS variation_id,
-            v.name AS variation_name,
-            v.sub_sku AS variation_sku,
-            c.name AS category_name,
-            COALESCE(SUM(vld.qty_available), 0) AS qty_available
-        FROM variations v
-        JOIN products p ON p.id = v.product_id
+    $db  = get_db();
+    $bid = business_id();
+    $st  = $db->prepare("
+        SELECT p.name AS product,
+               COALESCE(pv.name, 'Default') AS variation,
+               c.name AS category
+        FROM product_variations pv
+        JOIN variation_location_details vld ON vld.product_variation_id = pv.id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
         LEFT JOIN categories c ON c.id = p.category_id
-        LEFT JOIN variation_location_details vld ON vld.variation_id = v.id
-        WHERE p.business_id = :business_id
-          AND p.is_inactive = 0
-          AND p.enable_stock = 1
-        GROUP BY v.id, p.id, p.name, p.sku, v.name, v.sub_sku, c.name
-        HAVING qty_available <= 0
-        ORDER BY p.name ASC
-        LIMIT :limit
+        WHERE vld.qty_available <= 0
+        GROUP BY pv.id
+        ORDER BY p.name
     ");
-    $stmt->bindValue('business_id', $businessId, PDO::PARAM_INT);
-    $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll();
+    $st->execute([':bid' => $bid]);
+    return $st->fetchAll();
 }
 
-/**
- * List of business locations, for the location filter dropdown
- * (kept here for future use even though the dashboard defaults to "all").
- */
-function get_locations(PDO $pdo, int $businessId): array
+// ── Recent sales ──────────────────────────────────────────────────────────────
+
+function get_recent_sales(int $limit = 8): array
 {
-    $stmt = $pdo->prepare("
-        SELECT id, name
-        FROM business_locations
-        WHERE business_id = :business_id
-        ORDER BY name ASC
+    $db  = get_db();
+    $bid = business_id();
+    $st  = $db->prepare("
+        SELECT t.invoice_no,
+               DATE(t.transaction_date) AS sale_date,
+               t.final_total,
+               COUNT(sl.id) AS items
+        FROM transactions t
+        JOIN transaction_sell_lines sl ON sl.transaction_id = t.id
+        WHERE t.type = 'sell' AND t.status = 'final' AND t.business_id = :bid
+        GROUP BY t.id
+        ORDER BY t.transaction_date DESC
+        LIMIT :lim
     ");
-    $stmt->execute(['business_id' => $businessId]);
-    return $stmt->fetchAll();
+    $st->bindValue(':bid', $bid,   PDO::PARAM_INT);
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
+}
+
+// ── Locations ─────────────────────────────────────────────────────────────────
+
+function get_locations(): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    $st  = $db->prepare("SELECT id, name FROM business_locations WHERE business_id = :bid ORDER BY name");
+    $st->execute([':bid' => $bid]);
+    return $st->fetchAll();
 }

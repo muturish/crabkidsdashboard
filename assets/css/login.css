@@ -1,0 +1,151 @@
+/* ── Brand tokens ─────────────────────────────────────────── */
+:root {
+    --ck-blue:        #0d3b8e;
+    --ck-blue-dark:   #092d6e;
+    --ck-blue-light:  #1a56c4;
+    --ck-orange:      #f97316;
+    --ck-orange-dark: #ea6c0a;
+    --ck-bg:          #f0f4ff;
+}
+
+/* ── Page ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--ck-blue) 0%, var(--ck-blue-light) 50%, var(--ck-orange) 100%);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Card ─────────────────────────────────────────────────── */
+.login-wrapper {
+    width: 100%;
+    padding: 1.5rem;
+    display: flex;
+    justify-content: center;
+}
+
+.login-card {
+    background: #ffffff;
+    border-radius: 1.25rem;
+    box-shadow: 0 20px 60px rgba(13, 59, 142, 0.25);
+    padding: 2.5rem 2.25rem 2rem;
+    width: 100%;
+    max-width: 420px;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.login-header {
+    text-align: center;
+    margin-bottom: 1.75rem;
+}
+
+.logo {
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+    border-radius: 50%;
+    border: 3px solid var(--ck-orange);
+    padding: 4px;
+    background: var(--ck-bg);
+    margin-bottom: 0.75rem;
+    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+}
+
+.brand-name {
+    color: var(--ck-blue);
+    font-weight: 700;
+    font-size: 1.4rem;
+    margin: 0 0 0.2rem;
+}
+
+.brand-sub {
+    color: var(--ck-orange);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+/* ── Form elements ────────────────────────────────────────── */
+.form-label {
+    color: var(--ck-blue);
+    font-size: 0.875rem;
+}
+
+.input-group-text {
+    background: var(--ck-bg);
+    border-color: #c8d5f0;
+    color: var(--ck-blue);
+}
+
+.form-control {
+    border-color: #c8d5f0;
+}
+
+.form-control:focus {
+    border-color: var(--ck-blue-light);
+    box-shadow: 0 0 0 0.2rem rgba(26, 86, 196, 0.2);
+}
+
+.toggle-pw {
+    border-color: #c8d5f0;
+    color: #6b7280;
+}
+
+.toggle-pw:hover {
+    color: var(--ck-blue);
+    border-color: var(--ck-blue);
+    background: var(--ck-bg);
+}
+
+/* ── Submit button ────────────────────────────────────────── */
+.login-btn {
+    background: linear-gradient(90deg, var(--ck-blue) 0%, var(--ck-blue-light) 100%);
+    border: none;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0.65rem;
+    letter-spacing: 0.03em;
+    transition: background 0.25s, box-shadow 0.25s, transform 0.1s;
+    box-shadow: 0 4px 14px rgba(13, 59, 142, 0.35);
+}
+
+.login-btn:hover {
+    background: linear-gradient(90deg, var(--ck-blue-dark) 0%, var(--ck-blue) 100%);
+    box-shadow: 0 6px 20px rgba(13, 59, 142, 0.45);
+}
+
+.login-btn:active {
+    transform: scale(0.98);
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.login-footer {
+    text-align: center;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    margin: 1.5rem 0 0;
+}
+
+/* ── Alert tweak ──────────────────────────────────────────── */
+.alert-danger {
+    font-size: 0.875rem;
+    border-radius: 0.6rem;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 480px) {
+    .login-card {
+        padding: 2rem 1.25rem 1.5rem;
+    }
+    .logo {
+        width: 80px;
+        height: 80px;
+    }
+}

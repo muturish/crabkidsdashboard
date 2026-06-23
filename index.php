@@ -1,190 +1,214 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/includes/data.php';
 
-[$fromDate, $toDate] = resolve_date_range();
-$fromDateOnly = substr($fromDate, 0, 10);
-$toDateOnly = substr($toDate, 0, 10);
+$page_title    = 'Overview';
+$page_subtitle = 'Your live stock snapshot for today';
 
-$kpis = get_overview_kpis($pdo, $bizId, $fromDate, $toDate);
-$series = get_stock_growth_series($pdo, $bizId, $fromDate, $toDate);
-$byCategory = get_stock_by_category($pdo, $bizId);
-$lowStock = get_low_stock_items($pdo, $bizId, 5);
-$outOfStock = get_out_of_stock_items($pdo, $bizId, 1000);
+// Fetch data
+try {
+    $kpis       = get_kpis();
+    $categories = get_stock_by_category();
+    $recent     = get_recent_sales();
+    $db_error   = null;
+} catch (Exception $e) {
+    $db_error   = $e->getMessage();
+    $kpis       = ['total_products' => 0, 'in_stock' => 0, 'low_stock' => 0, 'out_of_stock' => 0, 'stock_value' => 0];
+    $categories = [];
+    $recent     = [];
+}
 
-$pageTitle = 'Overview';
-$activePage = 'overview';
-require __DIR__ . '/includes/header.php';
+// Chart data
+$cat_labels = json_encode(array_column($categories, 'category'));
+$cat_values = json_encode(array_column($categories, 'total_qty'));
+
+$inline_scripts = <<<JS
+// ── Category donut ─────────────────────────────────────────
+const catLabels = {$cat_labels};
+const catValues = {$cat_values};
+
+const palette = [
+    '#0d3b8e','#1a56c4','#f97316','#ea6c0a','#10b981',
+    '#3b82f6','#f59e0b','#6366f1','#ec4899','#14b8a6'
+];
+
+if (catLabels.length) {
+    const ctx = document.getElementById('catChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: catLabels,
+            datasets: [{
+                data: catValues,
+                backgroundColor: palette,
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right', labels: { font: { size: 12 }, padding: 14 } }
+            },
+            cutout: '65%'
+        }
+    });
+}
+JS;
+
+require_once __DIR__ . '/includes/header.php';
 ?>
 
-<div class="page-heading">Overview</div>
-<div class="page-subheading">Stock and movement summary for CrabKids Kenya Co.</div>
+<?php if ($db_error): ?>
+<div class="alert alert-warning d-flex gap-2 align-items-start">
+    <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+    <div>
+        <strong>Database not connected.</strong> Please create your <code>.env</code> file from <code>.env.example</code>.<br>
+        <small class="text-muted"><?= htmlspecialchars($db_error) ?></small>
+    </div>
+</div>
+<?php endif; ?>
 
-<?php require __DIR__ . '/includes/date-filter.php'; ?>
-
+<!-- ── KPI row ──────────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="kpi-label">Units in stock</div>
-                    <div class="kpi-value"><?= format_number($kpis['total_units_on_hand']) ?></div>
-                </div>
-                <div class="kpi-icon navy"><i class="bi bi-boxes"></i></div>
+    <div class="col-6 col-lg-3">
+        <div class="kpi-card blue">
+            <div class="kpi-icon blue"><i class="bi bi-box-seam"></i></div>
+            <div>
+                <p class="kpi-label">Total Products</p>
+                <p class="kpi-value"><?= number_format($kpis['total_products']) ?></p>
             </div>
-            <div class="kpi-sub">Across all locations, right now</div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="kpi-label">Stock value (cost)</div>
-                    <div class="kpi-value"><?= format_kes($kpis['stock_value_cost']) ?></div>
-                </div>
-                <div class="kpi-icon coral"><i class="bi bi-cash-stack"></i></div>
+    <div class="col-6 col-lg-3">
+        <div class="kpi-card green">
+            <div class="kpi-icon green"><i class="bi bi-check-circle"></i></div>
+            <div>
+                <p class="kpi-label">In Stock</p>
+                <p class="kpi-value"><?= number_format($kpis['in_stock']) ?></p>
             </div>
-            <div class="kpi-sub">At purchase price</div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="kpi-label">Units received</div>
-                    <div class="kpi-value"><?= format_number($kpis['units_in']) ?></div>
-                </div>
-                <div class="kpi-icon green"><i class="bi bi-arrow-down-circle"></i></div>
+    <div class="col-6 col-lg-3">
+        <div class="kpi-card orange">
+            <div class="kpi-icon orange"><i class="bi bi-exclamation-circle"></i></div>
+            <div>
+                <p class="kpi-label">Low Stock</p>
+                <p class="kpi-value"><?= number_format($kpis['low_stock']) ?></p>
             </div>
-            <div class="kpi-sub">In selected period</div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="kpi-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="kpi-label">Units sold</div>
-                    <div class="kpi-value"><?= format_number($kpis['units_out']) ?></div>
-                </div>
-                <div class="kpi-icon amber"><i class="bi bi-arrow-up-circle"></i></div>
+    <div class="col-6 col-lg-3">
+        <div class="kpi-card red">
+            <div class="kpi-icon red"><i class="bi bi-x-circle"></i></div>
+            <div>
+                <p class="kpi-label">Out of Stock</p>
+                <p class="kpi-value"><?= number_format($kpis['out_of_stock']) ?></p>
             </div>
-            <div class="kpi-sub">In selected period</div>
         </div>
     </div>
 </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-lg-8">
-        <div class="panel h-100">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="panel-title">Stock growth</div>
-                    <div class="panel-subtitle">Cumulative net stock change (received − sold ± adjustments)</div>
-                </div>
-                <a href="stock-growth.php?from=<?= $fromDateOnly ?>&to=<?= $toDateOnly ?>" class="btn btn-sm btn-outline-dark">Full view</a>
-            </div>
-            <canvas id="overviewGrowthChart" height="90"></canvas>
-        </div>
+<!-- ── Stock value banner ───────────────────────────────────── -->
+<div class="dash-card mb-4 p-3 d-flex align-items-center gap-3"
+     style="border-left: 5px solid var(--ck-orange); background: linear-gradient(90deg,#fff7ed,#fff);">
+    <div class="kpi-icon orange" style="width:56px;height:56px;font-size:1.7rem;">
+        <i class="bi bi-currency-dollar"></i>
     </div>
-    <div class="col-lg-4">
-        <div class="panel h-100">
-            <div class="panel-title">Stock by category</div>
-            <div class="panel-subtitle">Units currently on hand</div>
-            <canvas id="categoryChart" height="220"></canvas>
-        </div>
+    <div>
+        <p class="kpi-label mb-0">Total Inventory Value (Sell Price)</p>
+        <p class="kpi-value" style="font-size:2rem;">
+            KES <?= number_format($kpis['stock_value'], 2) ?>
+        </p>
     </div>
 </div>
 
+<!-- ── Category donut + Recent sales ───────────────────────── -->
+<div class="row g-3 mb-4">
+
+    <div class="col-lg-5">
+        <div class="dash-card h-100">
+            <div class="dash-card-header">
+                <h6><i class="bi bi-pie-chart-fill me-2 text-orange" style="color:var(--ck-orange)"></i>Stock by Category</h6>
+            </div>
+            <div class="dash-card-body">
+                <?php if (empty($categories)): ?>
+                    <p class="text-muted text-center py-4">No data available.</p>
+                <?php else: ?>
+                    <div class="chart-wrap"><canvas id="catChart"></canvas></div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="dash-card h-100">
+            <div class="dash-card-header">
+                <h6><i class="bi bi-receipt me-2" style="color:var(--ck-blue)"></i>Recent Sales</h6>
+                <a href="/stock-growth.php" class="btn btn-sm btn-primary-ck">View All</a>
+            </div>
+            <div class="dash-card-body p-0">
+                <?php if (empty($recent)): ?>
+                    <p class="text-muted text-center py-4">No recent sales found.</p>
+                <?php else: ?>
+                <div class="table-responsive">
+                    <table class="table dash-table">
+                        <thead>
+                            <tr>
+                                <th>Invoice</th>
+                                <th>Date</th>
+                                <th>Items</th>
+                                <th class="text-end">Total (KES)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($recent as $r): ?>
+                            <tr>
+                                <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($r['invoice_no']) ?></span></td>
+                                <td><?= htmlspecialchars($r['sale_date']) ?></td>
+                                <td><?= (int)$r['items'] ?></td>
+                                <td class="text-end fw-semibold"><?= number_format((float)$r['final_total'], 2) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Quick alert links ─────────────────────────────────────── -->
 <div class="row g-3">
-    <div class="col-lg-6">
-        <div class="panel">
-            <div class="d-flex justify-content-between align-items-start mb-2">
+    <div class="col-md-6">
+        <a href="/low-stock.php" class="text-decoration-none">
+            <div class="dash-card p-3 d-flex align-items-center gap-3"
+                 style="border-left:4px solid var(--ck-orange);">
+                <div class="kpi-icon orange"><i class="bi bi-exclamation-triangle"></i></div>
                 <div>
-                    <div class="panel-title">Low stock — top 5</div>
-                    <div class="panel-subtitle">Closest to running out</div>
+                    <p class="mb-0 fw-700" style="color:var(--ck-orange);font-weight:700;"><?= number_format($kpis['low_stock']) ?> items</p>
+                    <p class="mb-0 small text-muted">are running low — click to view</p>
                 </div>
-                <a href="low-stock.php" class="btn btn-sm btn-outline-dark">View all</a>
+                <i class="bi bi-chevron-right ms-auto text-muted"></i>
             </div>
-            <?php if (empty($lowStock)): ?>
-                <p class="text-muted small mb-0">Nothing is below its alert quantity right now.</p>
-            <?php else: ?>
-                <table class="table table-sm table-low-stock mb-0">
-                    <thead><tr><th>Product</th><th class="text-end">On hand</th><th class="text-end">Alert at</th></tr></thead>
-                    <tbody>
-                    <?php foreach ($lowStock as $row): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($row['product_name']) ?> <span class="text-muted small"><?= htmlspecialchars($row['variation_name']) ?></span></td>
-                            <td class="text-end"><?= format_number((float)$row['qty_available']) ?></td>
-                            <td class="text-end text-muted"><?= format_number((float)$row['alert_quantity']) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
-        </div>
+        </a>
     </div>
-    <div class="col-lg-6">
-        <div class="panel">
-            <div class="panel-title">Out of stock</div>
-            <div class="panel-subtitle">Items at zero or negative quantity</div>
-            <div class="d-flex align-items-center gap-3">
-                <div class="kpi-icon coral" style="width:56px;height:56px;font-size:1.4rem;"><i class="bi bi-x-octagon"></i></div>
+    <div class="col-md-6">
+        <a href="/low-stock.php#out-of-stock" class="text-decoration-none">
+            <div class="dash-card p-3 d-flex align-items-center gap-3"
+                 style="border-left:4px solid #ef4444;">
+                <div class="kpi-icon red"><i class="bi bi-x-circle"></i></div>
                 <div>
-                    <div class="kpi-value mb-0"><?= format_number(count($outOfStock)) ?></div>
-                    <div class="text-muted small">variation(s) currently unavailable to sell</div>
+                    <p class="mb-0 fw-700" style="color:#ef4444;font-weight:700;"><?= number_format($kpis['out_of_stock']) ?> variations</p>
+                    <p class="mb-0 small text-muted">are out of stock — click to view</p>
                 </div>
+                <i class="bi bi-chevron-right ms-auto text-muted"></i>
             </div>
-            <?php if (!empty($outOfStock)): ?>
-                <a href="low-stock.php#out-of-stock" class="btn btn-sm btn-outline-dark mt-3">View list</a>
-            <?php endif; ?>
-        </div>
+        </a>
     </div>
 </div>
 
-<script>
-const growthLabels = <?= json_encode(array_map(fn($r) => date('M j', strtotime($r['date'])), $series)) ?>;
-const growthRunning = <?= json_encode(array_map(fn($r) => $r['running_total'], $series)) ?>;
-
-new Chart(document.getElementById('overviewGrowthChart'), {
-    type: 'line',
-    data: {
-        labels: growthLabels,
-        datasets: [{
-            label: 'Cumulative net stock change',
-            data: growthRunning,
-            borderColor: '#ff6b5e',
-            backgroundColor: 'rgba(255,107,94,0.12)',
-            fill: true,
-            tension: 0.3,
-            pointRadius: 0,
-            borderWidth: 2.5,
-        }]
-    },
-    options: {
-        plugins: { legend: { display: false } },
-        scales: {
-            x: { grid: { display: false } },
-            y: { grid: { color: '#eceef3' } }
-        }
-    }
-});
-
-const categoryLabels = <?= json_encode(array_map(fn($r) => $r['category_name'], $byCategory)) ?>;
-const categoryUnits = <?= json_encode(array_map(fn($r) => (float)$r['total_units'], $byCategory)) ?>;
-
-new Chart(document.getElementById('categoryChart'), {
-    type: 'doughnut',
-    data: {
-        labels: categoryLabels,
-        datasets: [{
-            data: categoryUnits,
-            backgroundColor: ['#ff6b5e', '#1f2a44', '#2bb673', '#e0a324', '#7c83fd', '#e25555', '#5cc8d7', '#a78bfa'],
-            borderWidth: 0,
-        }]
-    },
-    options: {
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } }
-    }
-});
-</script>
-
-<?php require __DIR__ . '/includes/footer.php'; ?>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
