@@ -64,8 +64,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="alert alert-warning d-flex gap-2 align-items-start">
     <i class="bi bi-exclamation-triangle-fill mt-1"></i>
     <div>
-        <strong>Database not connected.</strong> Please create your <code>.env</code> file from <code>.env.example</code>.<br>
-        <small class="text-muted"><?= htmlspecialchars($db_error) ?></small>
+        <strong>Query error:</strong> <?= htmlspecialchars($db_error) ?>
     </div>
 </div>
 <?php endif; ?>

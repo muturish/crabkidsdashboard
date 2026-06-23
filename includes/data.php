@@ -34,8 +34,7 @@ function get_kpis(): array
         SELECT COUNT(DISTINCT pv.id)
         FROM product_variations pv
         JOIN variation_location_details vld ON vld.product_variation_id = pv.id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        WHERE vld.qty_available > 0
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         WHERE vld.qty_available > 0
     ");
     $st->execute([':bid' => $bid]);
     $in_stock = (int) $st->fetchColumn();
@@ -45,8 +44,7 @@ function get_kpis(): array
         SELECT COUNT(DISTINCT pv.id)
         FROM product_variations pv
         JOIN variation_location_details vld ON vld.product_variation_id = pv.id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        WHERE vld.qty_available > 0 AND vld.qty_available <= p.alert_quantity
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         WHERE vld.qty_available > 0 AND vld.qty_available <= p.alert_quantity
     ");
     $st->execute([':bid' => $bid]);
     $low_stock = (int) $st->fetchColumn();
@@ -56,8 +54,7 @@ function get_kpis(): array
         SELECT COUNT(DISTINCT pv.id)
         FROM product_variations pv
         JOIN variation_location_details vld ON vld.product_variation_id = pv.id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        WHERE vld.qty_available <= 0
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         WHERE vld.qty_available <= 0
     ");
     $st->execute([':bid' => $bid]);
     $out_of_stock = (int) $st->fetchColumn();
@@ -67,8 +64,7 @@ function get_kpis(): array
         SELECT COALESCE(SUM(vld.qty_available * pv.default_sell_price), 0)
         FROM product_variations pv
         JOIN variation_location_details vld ON vld.product_variation_id = pv.id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        WHERE vld.qty_available > 0
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         WHERE vld.qty_available > 0
     ");
     $st->execute([':bid' => $bid]);
     $stock_value = (float) $st->fetchColumn();
@@ -87,8 +83,7 @@ function get_stock_by_category(): array
                SUM(vld.qty_available) AS total_qty
         FROM variation_location_details vld
         JOIN product_variations pv ON pv.id = vld.product_variation_id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        JOIN categories c ON c.id = p.category_id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         JOIN categories c ON c.id = p.category_id
         WHERE vld.qty_available > 0
         GROUP BY c.id, c.name
         ORDER BY total_qty DESC
@@ -162,8 +157,7 @@ function get_top_restocked(string $from, string $to, int $limit = 10): array
                SUM(pl.quantity) AS total_received
         FROM purchase_lines pl
         JOIN product_variations pv ON pv.id = pl.variation_id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        JOIN transactions t ON t.id = pl.transaction_id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         JOIN transactions t ON t.id = pl.transaction_id
             AND t.type = 'purchase' AND t.status = 'received'
             AND DATE(t.transaction_date) BETWEEN :from AND :to
         GROUP BY pv.id
@@ -192,8 +186,7 @@ function get_low_stock_items(): array
                c.name AS category
         FROM product_variations pv
         JOIN variation_location_details vld ON vld.product_variation_id = pv.id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        LEFT JOIN categories c ON c.id = p.category_id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         LEFT JOIN categories c ON c.id = p.category_id
         WHERE vld.qty_available > 0 AND vld.qty_available <= p.alert_quantity
         GROUP BY pv.id
         ORDER BY qty ASC
@@ -212,8 +205,7 @@ function get_out_of_stock_items(): array
                c.name AS category
         FROM product_variations pv
         JOIN variation_location_details vld ON vld.product_variation_id = pv.id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid AND p.deleted_at IS NULL
-        LEFT JOIN categories c ON c.id = p.category_id
+        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid         LEFT JOIN categories c ON c.id = p.category_id
         WHERE vld.qty_available <= 0
         GROUP BY pv.id
         ORDER BY p.name
