@@ -36,56 +36,27 @@ var cumul = {$j_cumul};
 if (days.length) {
   new Chart(document.getElementById('barChart'), {
     type: 'bar',
-    data: {
-      labels: days,
-      datasets: [
-        { label: 'Received', data: recv, backgroundColor: 'rgba(29,78,216,.75)' },
-        { label: 'Sold',     data: sold, backgroundColor: 'rgba(249,115,22,.75)' }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' } },
-      scales: {
-        x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } },
-        y: { beginAtZero: true }
-      }
-    }
+    data: { labels:days, datasets:[
+      { label:'Received', data:recv, backgroundColor:'rgba(29,78,216,.75)' },
+      { label:'Sold',     data:sold, backgroundColor:'rgba(249,115,22,.75)' }
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:true}} }
   });
 
   new Chart(document.getElementById('lineChart'), {
     type: 'line',
-    data: {
-      labels: days,
-      datasets: [{
-        label: 'Cumulative Net Change',
-        data: cumul,
-        borderColor: '#1d4ed8',
-        backgroundColor: 'rgba(29,78,216,.08)',
-        fill: true,
-        pointRadius: days.length > 60 ? 0 : 3
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' } },
-      scales: {
-        x: { grid: { display: false }, ticks: { maxTicksLimit: 14 } },
-        y: {}
-      }
-    }
+    data: { labels:days, datasets:[{ label:'Cumulative Net Change', data:cumul, borderColor:'#1d4ed8', backgroundColor:'rgba(29,78,216,.08)', fill:true, pointRadius:days.length>60?0:3 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{}} }
   });
 }
 
 document.querySelectorAll('[data-days]').forEach(function(btn){
-  btn.addEventListener('click', function(){
-    var days = parseInt(this.dataset.days);
-    var to   = new Date();
-    var from = new Date();
-    from.setDate(to.getDate() - (days - 1));
-    function fmt(d){ return d.toISOString().split('T')[0]; }
-    document.getElementById('from').value = fmt(from);
-    document.getElementById('to').value   = fmt(to);
+  btn.addEventListener('click',function(){
+    var d=parseInt(this.dataset.days),to=new Date(),from=new Date();
+    from.setDate(to.getDate()-(d-1));
+    function fmt(x){return x.toISOString().split('T')[0];}
+    document.getElementById('from').value=fmt(from);
+    document.getElementById('to').value=fmt(to);
     document.getElementById('filterForm').submit();
   });
 });
@@ -95,131 +66,128 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <?php if ($db_error): ?>
-<div class="alert-banner alert-error">
-  <i class="bi bi-x-circle-fill"></i>
-  <div><strong>Database error:</strong> <?= htmlspecialchars($db_error) ?></div>
-</div>
+<div class="ck-alert error"><i class="bi bi-x-circle-fill"></i><div><strong>Database error:</strong> <?= htmlspecialchars($db_error) ?></div></div>
 <?php endif; ?>
 
-<!-- ── Page header ───────────────────────────────────────────── -->
-<div class="page-header">
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
   <div>
-    <div class="page-title"><?= htmlspecialchars($page_title) ?></div>
-    <div class="page-subtitle"><?= htmlspecialchars($page_subtitle) ?></div>
+    <h1 class="ck-page-title"><?= htmlspecialchars($page_title) ?></h1>
+    <p class="ck-page-sub mb-0"><?= htmlspecialchars($page_subtitle) ?></p>
   </div>
 </div>
 
-<!-- ── Summary KPIs ─────────────────────────────────────────── -->
-<div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);max-width:600px;margin-bottom:20px;">
-  <div class="kpi-card kpi-blue">
-    <div class="kpi-card-top">
-      <span class="kpi-label">Total Received</span>
-      <span class="kpi-icon"><i class="bi bi-arrow-down-circle"></i></span>
+<!-- ── Summary KPIs ──────────────────────────────────────────── -->
+<div class="row g-3 mb-4" style="max-width:560px;">
+  <div class="col-4">
+    <div class="ck-kpi kpi-blue h-100">
+      <div class="ck-kpi-top"><p class="ck-kpi-label">Total Received</p><span class="ck-kpi-icon"><i class="bi bi-arrow-down-circle"></i></span></div>
+      <div class="ck-kpi-value"><?= number_format($total_recv) ?></div>
+      <div class="ck-kpi-sub">units in period</div>
     </div>
-    <div class="kpi-value"><?= number_format($total_recv) ?></div>
-    <div class="kpi-sub">units in period</div>
   </div>
-  <div class="kpi-card kpi-orange">
-    <div class="kpi-card-top">
-      <span class="kpi-label">Total Sold</span>
-      <span class="kpi-icon"><i class="bi bi-arrow-up-circle"></i></span>
+  <div class="col-4">
+    <div class="ck-kpi kpi-orange h-100">
+      <div class="ck-kpi-top"><p class="ck-kpi-label">Total Sold</p><span class="ck-kpi-icon"><i class="bi bi-arrow-up-circle"></i></span></div>
+      <div class="ck-kpi-value"><?= number_format($total_sold) ?></div>
+      <div class="ck-kpi-sub">units in period</div>
     </div>
-    <div class="kpi-value"><?= number_format($total_sold) ?></div>
-    <div class="kpi-sub">units in period</div>
   </div>
-  <div class="kpi-card <?= $net >= 0 ? 'kpi-green' : 'kpi-red' ?>">
-    <div class="kpi-card-top">
-      <span class="kpi-label">Net Change</span>
-      <span class="kpi-icon"><i class="bi bi-<?= $net >= 0 ? 'graph-up' : 'graph-down' ?>"></i></span>
+  <div class="col-4">
+    <div class="ck-kpi <?= $net>=0?'kpi-green':'kpi-red' ?> h-100">
+      <div class="ck-kpi-top"><p class="ck-kpi-label">Net Change</p><span class="ck-kpi-icon"><i class="bi bi-<?= $net>=0?'graph-up':'graph-down' ?>"></i></span></div>
+      <div class="ck-kpi-value"><?= ($net>=0?'+':'').number_format($net) ?></div>
+      <div class="ck-kpi-sub">cumulative</div>
     </div>
-    <div class="kpi-value"><?= ($net >= 0 ? '+' : '') . number_format($net) ?></div>
-    <div class="kpi-sub">cumulative</div>
   </div>
 </div>
 
-<!-- ── Filter ───────────────────────────────────────────────── -->
-<form id="filterForm" method="GET" action="" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
-  <div class="date-range-group">
+<!-- ── Filter ────────────────────────────────────────────────── -->
+<form id="filterForm" method="GET" action="" class="ck-filter-bar">
+  <div class="ck-date-group">
     <input type="date" id="from" name="from" value="<?= $from ?>">
-    <span class="date-range-sep">→</span>
+    <span class="ck-date-sep">→</span>
     <input type="date" id="to" name="to" value="<?= $to ?>">
   </div>
-  <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i> Apply</button>
-  <div class="preset-group">
-    <button type="button" class="preset-btn" data-days="7">7D</button>
-    <button type="button" class="preset-btn" data-days="30">30D</button>
-    <button type="button" class="preset-btn" data-days="90">90D</button>
-    <button type="button" class="preset-btn" data-days="180">6M</button>
+  <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
+  <div class="ck-presets">
+    <button type="button" class="ck-preset-btn" data-days="7">7D</button>
+    <button type="button" class="ck-preset-btn" data-days="30">30D</button>
+    <button type="button" class="ck-preset-btn" data-days="90">90D</button>
+    <button type="button" class="ck-preset-btn" data-days="180">6M</button>
   </div>
-  <a href="stock-growth.php" class="btn btn-ghost btn-sm">Reset</a>
+  <a href="stock-growth.php" class="btn btn-ck-ghost btn-sm ms-1">Reset</a>
 </form>
 
-<!-- ── Charts ───────────────────────────────────────────────── -->
+<!-- ── Charts ────────────────────────────────────────────────── -->
 <?php if ($rows): ?>
-<div class="grid grid-12-8" style="margin-bottom:16px;">
-  <div class="card">
-    <div class="card-header">
-      <h6 class="card-title"><span class="card-title-icon blue"><i class="bi bi-bar-chart-fill"></i></span> Daily Received vs Sold</h6>
-      <span class="card-meta"><?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></span>
-    </div>
-    <div class="card-body">
-      <div class="chart-container" style="height:260px;"><canvas id="barChart"></canvas></div>
+<div class="row g-3 mb-3">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header">
+        <h6 class="card-title"><span class="ck-card-icon blue"><i class="bi bi-bar-chart-fill"></i></span> Daily Received vs Sold</h6>
+        <span class="text-muted small"><?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></span>
+      </div>
+      <div class="card-body">
+        <div class="ck-chart" style="height:260px;"><canvas id="barChart"></canvas></div>
+      </div>
     </div>
   </div>
-  <div class="card">
-    <div class="card-header">
-      <h6 class="card-title"><span class="card-title-icon blue"><i class="bi bi-graph-up"></i></span> Cumulative Net Change</h6>
-    </div>
-    <div class="card-body">
-      <div class="chart-container" style="height:260px;"><canvas id="lineChart"></canvas></div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header">
+        <h6 class="card-title"><span class="ck-card-icon blue"><i class="bi bi-graph-up"></i></span> Cumulative Net Change</h6>
+      </div>
+      <div class="card-body">
+        <div class="ck-chart" style="height:260px;"><canvas id="lineChart"></canvas></div>
+      </div>
     </div>
   </div>
 </div>
 <?php else: ?>
-<div class="card" style="margin-bottom:16px;">
+<div class="card mb-3">
   <div class="card-body">
-    <div class="empty-state">
-      <div class="empty-state-icon"><i class="bi bi-bar-chart"></i></div>
-      <div class="empty-state-title">No movement data</div>
-      <div class="empty-state-desc">No stock movement was recorded in this date range.</div>
+    <div class="ck-empty">
+      <div class="ck-empty-icon"><i class="bi bi-bar-chart"></i></div>
+      <p class="ck-empty-title">No movement data</p>
+      <p class="ck-empty-desc">No stock movement was recorded in this date range.</p>
     </div>
   </div>
 </div>
 <?php endif; ?>
 
-<!-- ── Most restocked ────────────────────────────────────────── -->
-<div class="section-header">
-  <span class="section-title">Most Restocked Products</span>
-  <span class="card-meta"><?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></span>
+<!-- ── Most restocked ─────────────────────────────────────────── -->
+<div class="d-flex align-items-center justify-content-between mb-3 mt-2">
+  <span class="ck-section-title">Most Restocked Products</span>
+  <span class="text-muted small"><?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></span>
 </div>
 
-<div class="card" style="margin-bottom:16px;">
+<div class="card mb-3">
   <?php if (empty($top)): ?>
   <div class="card-body">
-    <div class="empty-state">
-      <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
-      <div class="empty-state-title">No purchase data</div>
-      <div class="empty-state-desc">No restocking records found for this period.</div>
+    <div class="ck-empty">
+      <div class="ck-empty-icon"><i class="bi bi-inbox"></i></div>
+      <p class="ck-empty-title">No purchase data</p>
+      <p class="ck-empty-desc">No restocking records found for this period.</p>
     </div>
   </div>
   <?php else: ?>
-  <div class="card-body-flush table-scroll">
-    <table class="data-table">
+  <div class="table-responsive">
+    <table class="table mb-0">
       <thead>
         <tr>
-          <th class="td-rank">#</th>
+          <th class="ck-td-rank">#</th>
           <th>Product</th>
           <th>Variation</th>
-          <th style="text-align:right;">Units Received</th>
+          <th class="text-end">Units Received</th>
         </tr>
       </thead>
       <tbody>
       <?php foreach ($top as $i => $r): ?>
         <tr>
-          <td class="td-rank"><span class="rank-badge <?= $i===0?'rank-1':($i===1?'rank-2':($i===2?'rank-3':'')) ?>"><?= $i+1 ?></span></td>
-          <td class="fw-600"><?= htmlspecialchars($r['product']) ?></td>
-          <td><span class="chip chip-slate"><?= htmlspecialchars($r['variation']) ?></span></td>
-          <td style="text-align:right;" class="fw-700 text-blue"><?= number_format((float)$r['total_received']) ?></td>
+          <td class="ck-td-rank"><span class="ck-rank <?= $i===0?'r1':($i===1?'r2':($i===2?'r3':'')) ?>"><?= $i+1 ?></span></td>
+          <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
+          <td><span class="ck-chip ck-chip-slate"><?= htmlspecialchars($r['variation']) ?></span></td>
+          <td class="text-end fw-bold" style="color:var(--ck-blue)"><?= number_format((float)$r['total_received']) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
@@ -230,33 +198,29 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- ── Daily breakdown ───────────────────────────────────────── -->
 <?php if ($rows): ?>
-<div class="section-header">
-  <span class="section-title">Daily Breakdown</span>
+<div class="d-flex align-items-center justify-content-between mb-3 mt-2">
+  <span class="ck-section-title">Daily Breakdown</span>
 </div>
 <div class="card">
-  <div class="card-body-flush table-scroll table-scroll-y" style="max-height:360px;">
-    <table class="data-table">
+  <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
+    <table class="table mb-0">
       <thead>
         <tr>
           <th>Date</th>
-          <th style="text-align:right;">Received</th>
-          <th style="text-align:right;">Sold</th>
-          <th style="text-align:right;">Net</th>
-          <th style="text-align:right;">Cumulative</th>
+          <th class="text-end">Received</th>
+          <th class="text-end">Sold</th>
+          <th class="text-end">Net</th>
+          <th class="text-end">Cumulative</th>
         </tr>
       </thead>
       <tbody>
-      <?php foreach (array_reverse($rows) as $r):
-        $n = (int)$r['net'];
-      ?>
+      <?php foreach (array_reverse($rows) as $r): $n=(int)$r['net']; ?>
         <tr>
-          <td class="fw-500"><?= $r['day'] ?></td>
-          <td style="text-align:right;"><?= number_format($r['received']) ?></td>
-          <td style="text-align:right;"><?= number_format($r['sold']) ?></td>
-          <td style="text-align:right;" class="fw-700 <?= $n > 0 ? 'text-success' : ($n < 0 ? 'text-danger' : 'text-tertiary') ?>">
-            <?= ($n > 0 ? '+' : '') . number_format($n) ?>
-          </td>
-          <td style="text-align:right;" class="fw-600"><?= number_format($r['cumulative']) ?></td>
+          <td class="fw-medium"><?= $r['day'] ?></td>
+          <td class="text-end"><?= number_format($r['received']) ?></td>
+          <td class="text-end"><?= number_format($r['sold']) ?></td>
+          <td class="text-end fw-bold <?= $n>0?'text-success':($n<0?'text-danger':'text-muted') ?>"><?= ($n>0?'+':'').number_format($n) ?></td>
+          <td class="text-end fw-semibold"><?= number_format($r['cumulative']) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
