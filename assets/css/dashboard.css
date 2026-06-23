@@ -1,12 +1,8 @@
-/*
- * CrabKids Dashboard — Custom layer
- * Rule: ZERO Bootstrap class names are defined here.
- * Bootstrap handles all layout, grid, buttons, cards, tables.
- * We only add ck-* classes for things Bootstrap doesn't have.
- * ============================================================ */
-
-/* ── 1. FONT & BODY ─────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+/* CrabKids Dashboard — Custom layer
+ * Rule: ZERO Bootstrap class names defined here.
+ * Bootstrap handles layout/grid/cards/tables/buttons.
+ * We only add ck-* classes for custom components.
+ * ======================================================= */
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
