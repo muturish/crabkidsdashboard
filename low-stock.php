@@ -5,14 +5,20 @@ require_once __DIR__ . '/includes/data.php';
 $page_title    = 'Low Stock Alerts';
 $page_subtitle = 'Items at or below alert threshold, including out-of-stock variations';
 
+$min_stock = isset($_GET['min']) && is_numeric($_GET['min']) && $_GET['min'] > 0 ? (float)$_GET['min'] : 4;
+
 try {
-    $low = get_low_stock_items(200);
-    $out = get_out_of_stock_items(200);
+    $low     = get_low_stock_items(200);
+    $out     = get_out_of_stock_items(200);
+    $restock = get_restock_requirements($min_stock);
     $db_error = null;
 } catch (Exception $e) {
     $db_error = $e->getMessage();
-    $low = $out = [];
+    $low = $out = $restock = [];
 }
+
+$restock_units = array_sum(array_column($restock, 'shortfall'));
+$restock_cost  = array_sum(array_column($restock, 'restock_cost'));
 
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -25,9 +31,72 @@ require_once __DIR__ . '/includes/header.php';
   <div><h1 class="ck-page-title"><?= htmlspecialchars($page_title) ?></h1><p class="ck-page-sub mb-0"><?= htmlspecialchars($page_subtitle) ?></p></div>
 </div>
 
-<div class="row g-3 mb-4" style="max-width:380px;">
-  <div class="col-6"><div class="ck-kpi kpi-amber"><div class="ck-kpi-head"><p class="ck-kpi-label">Low Stock</p><span class="ck-kpi-icon"><i class="bi bi-exclamation-triangle"></i></span></div><div class="ck-kpi-val"><?= number_format(count($low)) ?></div><div class="ck-kpi-sub">below threshold</div></div></div>
-  <div class="col-6"><div class="ck-kpi kpi-red"><div class="ck-kpi-head"><p class="ck-kpi-label">Out of Stock</p><span class="ck-kpi-icon"><i class="bi bi-x-circle"></i></span></div><div class="ck-kpi-val"><?= number_format(count($out)) ?></div><div class="ck-kpi-sub">zero units</div></div></div>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="ck-kpi kpi-amber"><div class="ck-kpi-head"><p class="ck-kpi-label">Low Stock</p><span class="ck-kpi-icon"><i class="bi bi-exclamation-triangle"></i></span></div><div class="ck-kpi-val"><?= number_format(count($low)) ?></div><div class="ck-kpi-sub">below threshold</div></div></div>
+  <div class="col-6 col-md-3"><div class="ck-kpi kpi-red"><div class="ck-kpi-head"><p class="ck-kpi-label">Out of Stock</p><span class="ck-kpi-icon"><i class="bi bi-x-circle"></i></span></div><div class="ck-kpi-val"><?= number_format(count($out)) ?></div><div class="ck-kpi-sub">zero units</div></div></div>
+  <div class="col-6 col-md-3"><div class="ck-kpi kpi-orange"><div class="ck-kpi-head"><p class="ck-kpi-label">Units Needed</p><span class="ck-kpi-icon"><i class="bi bi-box-seam"></i></span></div><div class="ck-kpi-val"><?= number_format($restock_units) ?></div><div class="ck-kpi-sub">to reach <?= number_format($min_stock) ?> pairs each</div></div></div>
+  <div class="col-6 col-md-3"><div class="ck-kpi kpi-green"><div class="ck-kpi-head"><p class="ck-kpi-label">Restock Cost</p><span class="ck-kpi-icon"><i class="bi bi-cash-coin"></i></span></div><div class="ck-kpi-val sm">KES <?= number_format($restock_cost) ?></div><div class="ck-kpi-sub">at purchase price</div></div></div>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <span class="ck-label">Restock to Minimum Stock Level</span>
+  <form method="GET" action="" class="d-flex align-items-center gap-2">
+    <label for="inp-min" class="text-muted small mb-0">Minimum pairs per item</label>
+    <input type="number" id="inp-min" name="min" min="1" step="1" value="<?= htmlspecialchars($min_stock) ?>" class="form-control form-control-sm" style="width:80px;">
+    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Recalculate</button>
+  </form>
+</div>
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center justify-content-between gap-2">
+    <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-green"><i class="bi bi-cash-coin"></i></span>Capital Required to Bring Every Item Up to <?= number_format($min_stock) ?> Pairs</h6>
+    <span class="ck-chip ck-chip-amber"><?= count($restock) ?> items</span>
+  </div>
+  <?php if (empty($restock)): ?>
+    <div class="card-body"><div class="ck-empty"><div class="ck-empty-icon" style="background:#ecfdf5;color:#059669;"><i class="bi bi-check-circle-fill"></i></div><p class="mb-0 fw-bold">Nothing to restock!</p><small class="text-muted">Every item already has at least <?= number_format($min_stock) ?> pairs in stock.</small></div></div>
+  <?php else:
+    $restock_sorted = $restock;
+    usort($restock_sorted, fn($a, $b) => $b['restock_cost'] <=> $a['restock_cost']);
+  ?>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Variation</th>
+            <th class="hide-sm">Category</th>
+            <th class="text-center">In Stock</th>
+            <th class="text-center">Shortfall</th>
+            <th class="text-end hide-sm">Unit Cost</th>
+            <th class="text-end">Restock Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($restock_sorted as $r): ?>
+          <tr>
+            <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
+            <td><span class="ck-chip ck-chip-slate"><?= htmlspecialchars($r['variation']) ?></span></td>
+            <td class="text-muted hide-sm"><?= htmlspecialchars($r['category'] ?? '—') ?></td>
+            <td class="text-center fw-bold <?= (float)$r['qty']<=0?'text-danger':'text-warning' ?>"><?= number_format((float)$r['qty']) ?></td>
+            <td class="text-center">+<?= number_format($r['shortfall']) ?></td>
+            <td class="text-end text-muted hide-sm">KES <?= number_format((float)$r['purchase_price']) ?></td>
+            <td class="text-end fw-bold" style="color:#059669">KES <?= number_format($r['restock_cost']) ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+        <tfoot>
+          <tr class="fw-bold">
+            <td class="fw-semibold">Total</td>
+            <td></td>
+            <td class="hide-sm"></td>
+            <td class="text-center"></td>
+            <td class="text-center"><?= number_format($restock_units) ?></td>
+            <td class="text-end hide-sm"></td>
+            <td class="text-end" style="color:#059669">KES <?= number_format($restock_cost) ?></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  <?php endif; ?>
 </div>
 
 <div class="d-flex align-items-center justify-content-between mb-3"><span class="ck-label">Low Stock — At or Below Alert Quantity</span><span class="ck-chip ck-chip-amber"><?= count($low) ?> items</span></div>

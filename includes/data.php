@@ -447,6 +447,42 @@ function get_best_selling_products(
     return $st->fetchAll();
 }
 
+// ── Restock requirement to reach a minimum stock level ─────────────────────────
+
+function get_restock_requirements(float $min_stock = 4): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $st = $db->prepare("
+        SELECT p.name AS product,
+               v.name AS variation,
+               c.name AS category,
+               SUM(vld.qty_available) AS qty,
+               COALESCE(v.dpp_inc_tax, v.default_purchase_price, 0) AS purchase_price
+        FROM variation_location_details vld
+        JOIN variations v ON v.id = vld.variation_id
+        JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
+        LEFT JOIN categories c ON c.id = p.category_id
+        GROUP BY v.id
+        HAVING SUM(vld.qty_available) < :min_stock
+        ORDER BY qty ASC
+    ");
+    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    $st->bindValue(':min_stock', $min_stock);
+    $st->execute();
+    $rows = $st->fetchAll();
+
+    foreach ($rows as &$r) {
+        $qty            = (float)$r['qty'];
+        $r['shortfall'] = max(0, $min_stock - $qty);
+        $r['restock_cost'] = $r['shortfall'] * (float)$r['purchase_price'];
+    }
+    unset($r);
+
+    return $rows;
+}
+
 // ── Trailing 12-month revenue (used as a sensible default for forecasting) ────
 
 function get_trailing_annual_revenue(?int $brand_id = null): float
