@@ -55,6 +55,12 @@
       Sales by Size
     </a>
 
+    <a href="/best-sellers.php"
+       class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'best-sellers.php' ? 'active' : '' ?>">
+      <span class="ck-nav-icon"><i class="bi bi-trophy"></i></span>
+      Best Sellers
+    </a>
+
     <a href="/low-stock.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'low-stock.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-exclamation-triangle"></i></span>

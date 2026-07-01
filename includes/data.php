@@ -336,6 +336,87 @@ function get_daily_sold_by_category(string $from, string $to): array
     return ['dates' => $dates, 'categories' => $categories, 'pivot' => $pivot];
 }
 
+// ── Filter options: brands, categories, sub-categories ────────────────────────
+
+function get_filter_options(): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $st = $db->prepare("SELECT id, name FROM brands WHERE business_id = :bid AND deleted_at IS NULL ORDER BY name");
+    $st->execute([':bid' => $bid]);
+    $brands = $st->fetchAll();
+
+    $st = $db->prepare("SELECT id, name FROM categories WHERE business_id = :bid AND parent_id = 0 AND deleted_at IS NULL ORDER BY name");
+    $st->execute([':bid' => $bid]);
+    $categories = $st->fetchAll();
+
+    $st = $db->prepare("SELECT DISTINCT name FROM categories WHERE business_id = :bid AND parent_id != 0 AND deleted_at IS NULL ORDER BY name");
+    $st->execute([':bid' => $bid]);
+    $sub_categories = array_column($st->fetchAll(), 'name');
+
+    return compact('brands', 'categories', 'sub_categories');
+}
+
+// ── Best-selling products (filterable by brand / category / sub-category) ────
+
+function get_best_selling_products(
+    string $from,
+    string $to,
+    ?int $brand_id = null,
+    ?int $category_id = null,
+    ?string $sub_category = null,
+    int $limit = 50
+): array {
+    $db  = get_db();
+    $bid = business_id();
+
+    $where  = [];
+    $params = [':bid' => $bid, ':bid2' => $bid, ':from' => $from, ':to' => $to];
+
+    if ($brand_id) {
+        $where[] = 'p.brand_id = :brand_id';
+        $params[':brand_id'] = $brand_id;
+    }
+    if ($category_id) {
+        $where[] = 'p.category_id = :category_id';
+        $params[':category_id'] = $category_id;
+    }
+    if ($sub_category) {
+        $where[] = 'sc.name = :sub_category';
+        $params[':sub_category'] = $sub_category;
+    }
+    $extra = $where ? (' AND ' . implode(' AND ', $where)) : '';
+
+    $st = $db->prepare("
+        SELECT p.id, p.name AS product,
+               b.name  AS brand,
+               c.name  AS category,
+               sc.name AS sub_category,
+               COALESCE(SUM(sl.quantity - sl.quantity_returned), 0) AS qty_sold,
+               COALESCE(SUM((sl.quantity - sl.quantity_returned) * sl.unit_price_inc_tax), 0) AS revenue
+        FROM transaction_sell_lines sl
+        JOIN transactions t ON t.id = sl.transaction_id
+            AND t.type = 'sell' AND t.status = 'final'
+            AND t.business_id = :bid
+            AND DATE(t.transaction_date) BETWEEN :from AND :to
+        JOIN products p ON p.id = sl.product_id AND p.business_id = :bid2 AND p.is_inactive = 0
+        LEFT JOIN brands     b  ON b.id  = p.brand_id
+        LEFT JOIN categories c  ON c.id  = p.category_id
+        LEFT JOIN categories sc ON sc.id = p.sub_category_id
+        WHERE 1=1 {$extra}
+        GROUP BY p.id
+        ORDER BY qty_sold DESC
+        LIMIT :lim
+    ");
+    foreach ($params as $key => $val) {
+        $st->bindValue($key, $val);
+    }
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
+}
+
 // ── Monthly summary ───────────────────────────────────────────────────────────
 
 function get_monthly_summary(int $months = 6): array
