@@ -3,7 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/includes/data.php';
 
 $page_title    = 'Projected Income Growth';
-$page_subtitle = "Forecast the company's projected revenue over the next three years.";
+$page_subtitle = "Forecast the company's revenue over the next three years, based on your last 6 months of actual sales.";
 
 $this_year = (int)date('Y');
 
@@ -11,20 +11,46 @@ $fy = isset($_GET['fy']) && ctype_digit($_GET['fy']) ? (int)$_GET['fy'] : $this_
 if ($fy < $this_year - 1 || $fy > $this_year + 3) $fy = $this_year;
 
 $division_id = isset($_GET['division']) && ctype_digit($_GET['division']) ? (int)$_GET['division'] : null;
-$scenario    = in_array($_GET['scenario'] ?? '', ['conservative', 'expected', 'optimistic', 'custom'], true) ? $_GET['scenario'] : 'expected';
-
-$scenario_rates = ['conservative' => 10, 'expected' => 20, 'optimistic' => 40, 'custom' => 20];
-$default_growth = $scenario_rates[$scenario];
 
 try {
-    $opts            = get_filter_options();
-    $default_income  = get_trailing_annual_revenue($division_id);
-    $db_error        = null;
+    $opts     = get_filter_options();
+    $trend    = get_recent_sales_trend(6, $division_id);
+    $db_error = null;
 } catch (Exception $e) {
-    $db_error       = $e->getMessage();
-    $opts           = ['brands' => [], 'categories' => [], 'sub_categories' => []];
-    $default_income = 0;
+    $db_error = $e->getMessage();
+    $opts     = ['brands' => [], 'categories' => [], 'sub_categories' => []];
+    $trend    = [];
 }
+
+// Derive the projection defaults from the actual 6-month trend:
+// - Current Annual Income = 6-month average revenue, annualized (run-rate).
+// - Growth Rate = second-half vs first-half average, annualized, clamped to a sane range.
+$revenues     = array_column($trend, 'revenue');
+$months_count = count($revenues);
+$avg_monthly  = $months_count ? array_sum($revenues) / $months_count : 0;
+$default_income = $avg_monthly * 12;
+
+$half        = intdiv($months_count, 2);
+$first_half  = array_slice($revenues, 0, $half);
+$second_half = array_slice($revenues, $half);
+$avg_first   = $half ? array_sum($first_half) / $half : 0;
+$avg_second  = $half ? array_sum($second_half) / count($second_half) : 0;
+
+if ($avg_first > 0 && $half > 0) {
+    $growth_over_half = ($avg_second - $avg_first) / $avg_first;
+    $periods_per_year = 12 / $half;
+    $default_growth   = (pow(1 + $growth_over_half, $periods_per_year) - 1) * 100;
+} else {
+    $default_growth = 0;
+}
+$default_growth = round(max(-90, min(300, $default_growth)), 1);
+
+$j_hist_labels = json_encode(array_column($trend, 'label'));
+$j_hist_data   = json_encode(array_map(fn($v) => round($v), $revenues));
+
+$inline_scripts = <<<JS
+(function(){var c=document.getElementById('historyChart');if(!c)return;new Chart(c,{type:'bar',data:{labels:{$j_hist_labels},datasets:[{label:'Actual Revenue (KES)',data:{$j_hist_data},backgroundColor:'#1d4ed8',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return 'KES '+ctx.parsed.y.toLocaleString();}}}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{callback:function(v){return 'KES '+(v/1000).toFixed(0)+'k';}}}}}});})();
+JS;
 
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -55,11 +81,12 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="ck-pills mb-3">
   <span class="ck-pill"><i class="bi bi-calendar3" style="color:#1d4ed8"></i> <?= date('l, d F Y') ?></span>
-  <span class="ck-pill"><i class="bi bi-graph-up-arrow" style="color:#f97316"></i> Scenario: <strong><?= htmlspecialchars(ucfirst($scenario)) ?></strong></span>
+  <span class="ck-pill"><i class="bi bi-bar-chart-line" style="color:#f97316"></i> Avg. Monthly (6mo): <strong>KES <?= number_format($avg_monthly) ?></strong></span>
+  <span class="ck-pill"><i class="bi bi-graph-up-arrow" style="color:#059669"></i> Trend-Derived Growth: <strong><?= ($default_growth >= 0 ? '+' : '') . $default_growth ?>%</strong></span>
   <span class="ck-pill"><i class="bi bi-cash-coin text-muted"></i> Currency: <strong>KES</strong></span>
 </div>
 
-<!-- Filters (server-side: re-baselines the default income from real sales data) -->
+<!-- Filters (server-side: re-baselines the 6-month trend from real sales data) -->
 <form method="GET" action="" class="ck-filter ck-no-print">
   <select name="fy" id="sel-fy" class="form-select form-select-sm w-auto">
     <?php for ($y = $this_year - 1; $y <= $this_year + 3; $y++): ?>
@@ -78,32 +105,57 @@ require_once __DIR__ . '/includes/header.php';
     <option value="KES" selected>KES (Kenyan Shilling)</option>
   </select>
 
-  <select name="scenario" class="form-select form-select-sm w-auto">
-    <option value="expected"     <?= $scenario === 'expected'     ? 'selected' : '' ?>>Expected (20%)</option>
-    <option value="conservative" <?= $scenario === 'conservative' ? 'selected' : '' ?>>Conservative (10%)</option>
-    <option value="optimistic"   <?= $scenario === 'optimistic'   ? 'selected' : '' ?>>Optimistic (40%)</option>
-    <option value="custom"       <?= $scenario === 'custom'       ? 'selected' : '' ?>>Custom</option>
-  </select>
-
   <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
   <a href="projected-income.php" class="btn btn-ck-ghost btn-sm">Reset</a>
 </form>
+
+<!-- Historical Performance: the real data the projection is built on -->
+<div class="d-flex align-items-center justify-content-between mb-3"><span class="ck-label">Historical Performance</span><span class="ck-chip ck-chip-blue">last 6 complete months</span></div>
+<div class="card mb-4 ck-no-print">
+  <div class="card-header d-flex align-items-center justify-content-between gap-2">
+    <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-clock-history"></i></span>Actual Monthly Revenue</h6>
+    <small class="text-muted">This is what the assumptions below are derived from</small>
+  </div>
+  <div class="card-body">
+    <?php if (empty($trend) || $avg_monthly <= 0): ?>
+      <div class="ck-empty"><div class="ck-empty-icon"><i class="bi bi-bar-chart"></i></div><p class="mb-0 fw-semibold">No sales recorded in the last 6 months</p><small class="text-muted">Enter assumptions manually below.</small></div>
+    <?php else: ?>
+      <div class="ck-chart" style="height:220px;"><canvas id="historyChart"></canvas></div>
+      <div class="row g-3 mt-1 text-center">
+        <div class="col-4">
+          <div class="ck-kpi-label mb-1">Avg. Monthly Revenue</div>
+          <div class="fw-bold" style="color:#1d4ed8">KES <?= number_format($avg_monthly) ?></div>
+        </div>
+        <div class="col-4">
+          <div class="ck-kpi-label mb-1">First 3mo → Last 3mo</div>
+          <div class="fw-bold">KES <?= number_format($avg_first) ?> → KES <?= number_format($avg_second) ?></div>
+        </div>
+        <div class="col-4">
+          <div class="ck-kpi-label mb-1">Annualized Growth</div>
+          <div class="fw-bold" style="color:#059669"><?= ($default_growth >= 0 ? '+' : '') . $default_growth ?>%</div>
+        </div>
+      </div>
+    <?php endif; ?>
+  </div>
+</div>
 
 <!-- Projection Inputs -->
 <div class="card mb-4 ck-no-print">
   <div class="card-header d-flex align-items-center gap-2">
     <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-sliders"></i></span>Projection Inputs</h6>
-    <small class="text-muted">Current income defaults to trailing 12-month sales — adjust freely</small>
+    <small class="text-muted">Both defaults below are calculated from actual sales above — adjust freely to model a different assumption</small>
   </div>
   <div class="card-body">
     <div class="row g-3">
       <div class="col-6 col-md-4 col-lg-2">
         <label class="form-label ck-kpi-label">Current Annual Income (KES)</label>
         <input type="number" id="inp-current-income" class="form-control form-control-sm" min="0" step="1000" value="<?= (int)$default_income ?>">
+        <small class="text-muted">6-mo avg. × 12</small>
       </div>
       <div class="col-6 col-md-4 col-lg-2">
         <label class="form-label ck-kpi-label">Annual Growth Rate (%)</label>
         <input type="number" id="inp-growth-rate" class="form-control form-control-sm" min="-100" max="500" step="0.5" value="<?= (float)$default_growth ?>">
+        <small class="text-muted">from 6-mo trend</small>
       </div>
       <div class="col-6 col-md-4 col-lg-2">
         <label class="form-label ck-kpi-label">Additional Annual Income</label>

@@ -512,35 +512,57 @@ function get_restock_requirements(float $min_stock = 4, ?int $category_id = null
     return $rows;
 }
 
-// ── Trailing 12-month revenue (used as a sensible default for forecasting) ────
+// ── Recent monthly sales trend (drives the income projection defaults) ────────
+// Returns the last $months COMPLETE calendar months (oldest first), zero-filled
+// for months with no sales, optionally scoped to a single brand/division.
 
-function get_trailing_annual_revenue(?int $brand_id = null): float
+function get_recent_sales_trend(int $months = 6, ?int $brand_id = null): array
 {
     $db  = get_db();
     $bid = business_id();
 
+    $end = new DateTime('first day of this month');
+    $end->modify('-1 day'); // last day of the previous (most recent complete) month
+    $start = new DateTime($end->format('Y-m-01'));
+    $start->modify('-' . ($months - 1) . ' months');
+
+    $from = $start->format('Y-m-d');
+    $to   = $end->format('Y-m-d');
+
     if ($brand_id) {
         $st = $db->prepare("
-            SELECT COALESCE(SUM((sl.quantity - sl.quantity_returned) * sl.unit_price_inc_tax), 0)
+            SELECT DATE_FORMAT(t.transaction_date, '%Y-%m') AS ym,
+                   COALESCE(SUM((sl.quantity - sl.quantity_returned) * sl.unit_price_inc_tax), 0) AS revenue
             FROM transaction_sell_lines sl
             JOIN transactions t ON t.id = sl.transaction_id
                 AND t.type = 'sell' AND t.status = 'final'
                 AND t.business_id = :bid
-                AND t.transaction_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+                AND DATE(t.transaction_date) BETWEEN :from AND :to
             JOIN products p ON p.id = sl.product_id AND p.business_id = :bid2 AND p.brand_id = :brand_id
+            GROUP BY ym
         ");
-        $st->execute([':bid' => $bid, ':bid2' => $bid, ':brand_id' => $brand_id]);
-        return (float)$st->fetchColumn();
+        $st->execute([':bid' => $bid, ':bid2' => $bid, ':brand_id' => $brand_id, ':from' => $from, ':to' => $to]);
+    } else {
+        $st = $db->prepare("
+            SELECT DATE_FORMAT(transaction_date, '%Y-%m') AS ym,
+                   COALESCE(SUM(final_total), 0) AS revenue
+            FROM transactions
+            WHERE business_id = :bid AND type = 'sell' AND status = 'final'
+              AND DATE(transaction_date) BETWEEN :from AND :to
+            GROUP BY ym
+        ");
+        $st->execute([':bid' => $bid, ':from' => $from, ':to' => $to]);
     }
+    $map = array_column($st->fetchAll(), 'revenue', 'ym');
 
-    $st = $db->prepare("
-        SELECT COALESCE(SUM(final_total), 0)
-        FROM transactions
-        WHERE business_id = :bid AND type = 'sell' AND status = 'final'
-          AND transaction_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
-    ");
-    $st->execute([':bid' => $bid]);
-    return (float)$st->fetchColumn();
+    $rows   = [];
+    $cursor = clone $start;
+    while ($cursor <= $end) {
+        $key    = $cursor->format('Y-m');
+        $rows[] = ['month' => $key, 'label' => $cursor->format('M Y'), 'revenue' => (float)($map[$key] ?? 0)];
+        $cursor->modify('+1 month');
+    }
+    return $rows;
 }
 
 // ── Monthly summary ───────────────────────────────────────────────────────────
