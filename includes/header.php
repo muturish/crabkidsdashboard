@@ -61,6 +61,12 @@
       Best Sellers
     </a>
 
+    <a href="/projected-income.php"
+       class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'projected-income.php' ? 'active' : '' ?>">
+      <span class="ck-nav-icon"><i class="bi bi-graph-up-arrow"></i></span>
+      Projected Income
+    </a>
+
     <a href="/low-stock.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'low-stock.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-exclamation-triangle"></i></span>

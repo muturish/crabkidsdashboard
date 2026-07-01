@@ -447,6 +447,37 @@ function get_best_selling_products(
     return $st->fetchAll();
 }
 
+// ── Trailing 12-month revenue (used as a sensible default for forecasting) ────
+
+function get_trailing_annual_revenue(?int $brand_id = null): float
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    if ($brand_id) {
+        $st = $db->prepare("
+            SELECT COALESCE(SUM((sl.quantity - sl.quantity_returned) * sl.unit_price_inc_tax), 0)
+            FROM transaction_sell_lines sl
+            JOIN transactions t ON t.id = sl.transaction_id
+                AND t.type = 'sell' AND t.status = 'final'
+                AND t.business_id = :bid
+                AND t.transaction_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+            JOIN products p ON p.id = sl.product_id AND p.business_id = :bid2 AND p.brand_id = :brand_id
+        ");
+        $st->execute([':bid' => $bid, ':bid2' => $bid, ':brand_id' => $brand_id]);
+        return (float)$st->fetchColumn();
+    }
+
+    $st = $db->prepare("
+        SELECT COALESCE(SUM(final_total), 0)
+        FROM transactions
+        WHERE business_id = :bid AND type = 'sell' AND status = 'final'
+          AND transaction_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+    ");
+    $st->execute([':bid' => $bid]);
+    return (float)$st->fetchColumn();
+}
+
 // ── Monthly summary ───────────────────────────────────────────────────────────
 
 function get_monthly_summary(int $months = 6): array

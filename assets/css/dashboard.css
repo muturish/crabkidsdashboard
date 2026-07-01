@@ -529,3 +529,21 @@ body {
 /* ── 20. RESPONSIVE ─────────────────────────────────────────── */
 @media (max-width: 575px) { .hide-xs { display: none !important; } }
 @media (max-width: 767px) { .hide-sm { display: none !important; } }
+
+/* ── 21. PROJECTED INCOME PAGE (additive) ──────────────────────
+   New alert variants + trend badges used only by projected-income.php.
+   Nothing here overrides existing rules. */
+.ck-alert.info { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.ck-alert.ok   { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+
+.ck-trend { font-size: 0.7rem; font-weight: 700; display: inline-flex; align-items: center; gap: 2px; }
+.ck-trend.up   { color: #059669; }
+.ck-trend.down { color: #dc2626; }
+.ck-trend.flat { color: #94a3b8; }
+
+@media print {
+  .ck-topbar, .ck-sidebar, .ck-overlay, .ck-no-print { display: none !important; }
+  .ck-main { margin-left: 0 !important; margin-top: 0 !important; }
+  body { background: #fff !important; }
+  .card { box-shadow: none !important; break-inside: avoid; }
+}

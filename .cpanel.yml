@@ -2,4 +2,4 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/crabkidscoke/dashboard.crabkidskenya.co.ke/
-    - /bin/cp -rf assets config includes bootstrap.php index.php stock-growth.php low-stock.php sales-by-size.php best-sellers.php .env.example .gitignore .cpanel.yml $DEPLOYPATH
+    - /bin/cp -rf assets config includes bootstrap.php index.php stock-growth.php low-stock.php sales-by-size.php best-sellers.php projected-income.php .env.example .gitignore .cpanel.yml $DEPLOYPATH
