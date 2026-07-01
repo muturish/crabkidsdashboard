@@ -5,15 +5,19 @@ require_once __DIR__ . '/includes/data.php';
 $page_title    = 'Low Stock Alerts';
 $page_subtitle = 'Items at or below alert threshold, including out-of-stock variations';
 
-$min_stock = isset($_GET['min']) && is_numeric($_GET['min']) && $_GET['min'] > 0 ? (float)$_GET['min'] : 4;
+$min_stock    = isset($_GET['min']) && is_numeric($_GET['min']) && $_GET['min'] > 0 ? (float)$_GET['min'] : 4;
+$category_id  = isset($_GET['category']) && ctype_digit($_GET['category']) ? (int)$_GET['category'] : null;
+$sub_category = isset($_GET['subcat']) && $_GET['subcat'] !== '' ? $_GET['subcat'] : null;
 
 try {
-    $low     = get_low_stock_items(200);
-    $out     = get_out_of_stock_items(200);
-    $restock = get_restock_requirements($min_stock);
+    $opts    = get_filter_options();
+    $low     = get_low_stock_items(200, $category_id, $sub_category);
+    $out     = get_out_of_stock_items(200, $category_id, $sub_category);
+    $restock = get_restock_requirements($min_stock, $category_id, $sub_category);
     $db_error = null;
 } catch (Exception $e) {
     $db_error = $e->getMessage();
+    $opts = ['brands' => [], 'categories' => [], 'sub_categories' => []];
     $low = $out = $restock = [];
 }
 
@@ -38,13 +42,32 @@ require_once __DIR__ . '/includes/header.php';
   <div class="col-6 col-md-3"><div class="ck-kpi kpi-green"><div class="ck-kpi-head"><p class="ck-kpi-label">Restock Cost</p><span class="ck-kpi-icon"><i class="bi bi-cash-coin"></i></span></div><div class="ck-kpi-val sm">KES <?= number_format($restock_cost) ?></div><div class="ck-kpi-sub">at purchase price</div></div></div>
 </div>
 
+<form method="GET" action="" class="ck-filter">
+  <select name="category" class="form-select form-select-sm w-auto">
+    <option value="">All Categories</option>
+    <?php foreach ($opts['categories'] as $c): ?>
+      <option value="<?= $c['id'] ?>" <?= $category_id === (int)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
+    <?php endforeach; ?>
+  </select>
+
+  <select name="subcat" class="form-select form-select-sm w-auto">
+    <option value="">All Sizes</option>
+    <?php foreach ($opts['sub_categories'] as $sc): ?>
+      <option value="<?= htmlspecialchars($sc) ?>" <?= $sub_category === $sc ? 'selected' : '' ?>><?= htmlspecialchars($sc) ?></option>
+    <?php endforeach; ?>
+  </select>
+
+  <div class="d-flex align-items-center gap-2">
+    <label for="inp-min" class="text-muted small mb-0">Min. pairs per item</label>
+    <input type="number" id="inp-min" name="min" min="1" step="1" value="<?= htmlspecialchars($min_stock) ?>" class="form-control form-control-sm" style="width:80px;">
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
+  <a href="low-stock.php" class="btn btn-ck-ghost btn-sm">Reset</a>
+</form>
+
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <span class="ck-label">Restock to Minimum Stock Level</span>
-  <form method="GET" action="" class="d-flex align-items-center gap-2">
-    <label for="inp-min" class="text-muted small mb-0">Minimum pairs per item</label>
-    <input type="number" id="inp-min" name="min" min="1" step="1" value="<?= htmlspecialchars($min_stock) ?>" class="form-control form-control-sm" style="width:80px;">
-    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Recalculate</button>
-  </form>
 </div>
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center justify-content-between gap-2">

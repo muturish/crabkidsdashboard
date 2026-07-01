@@ -223,10 +223,28 @@ function get_top_stock_value(int $limit = 10): array
 
 // ── Low stock ─────────────────────────────────────────────────────────────────
 
-function get_low_stock_items(int $limit = 20): array
+// Shared category/sub-category WHERE fragment for the stock-level queries below.
+function _category_filter_sql(array &$params, ?int $category_id, ?string $sub_category): string
+{
+    $where = [];
+    if ($category_id) {
+        $where[] = 'p.category_id = :category_id';
+        $params[':category_id'] = $category_id;
+    }
+    if ($sub_category) {
+        $where[] = 'sc.name = :sub_category';
+        $params[':sub_category'] = $sub_category;
+    }
+    return $where ? (' AND ' . implode(' AND ', $where)) : '';
+}
+
+function get_low_stock_items(int $limit = 20, ?int $category_id = null, ?string $sub_category = null): array
 {
     $db  = get_db();
     $bid = business_id();
+
+    $params = [':bid' => $bid];
+    $extra  = _category_filter_sql($params, $category_id, $sub_category);
 
     $st = $db->prepare("
         SELECT p.name AS product,
@@ -237,14 +255,15 @@ function get_low_stock_items(int $limit = 20): array
         FROM variation_location_details vld
         JOIN variations v ON v.id = vld.variation_id
         JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
-        LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.alert_quantity IS NOT NULL AND p.alert_quantity > 0
+        LEFT JOIN categories c  ON c.id  = p.category_id
+        LEFT JOIN categories sc ON sc.id = p.sub_category_id
+        WHERE p.alert_quantity IS NOT NULL AND p.alert_quantity > 0 {$extra}
         GROUP BY v.id
         HAVING SUM(vld.qty_available) > 0 AND SUM(vld.qty_available) <= p.alert_quantity
         ORDER BY qty ASC
         LIMIT :lim
     ");
-    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    foreach ($params as $key => $val) $st->bindValue($key, $val);
     $st->bindValue(':lim', $limit, PDO::PARAM_INT);
     $st->execute();
     return $st->fetchAll();
@@ -252,10 +271,13 @@ function get_low_stock_items(int $limit = 20): array
 
 // ── Out of stock ──────────────────────────────────────────────────────────────
 
-function get_out_of_stock_items(int $limit = 200): array
+function get_out_of_stock_items(int $limit = 200, ?int $category_id = null, ?string $sub_category = null): array
 {
     $db  = get_db();
     $bid = business_id();
+
+    $params = [':bid' => $bid];
+    $extra  = _category_filter_sql($params, $category_id, $sub_category);
 
     $st = $db->prepare("
         SELECT p.name AS product,
@@ -265,13 +287,15 @@ function get_out_of_stock_items(int $limit = 200): array
         FROM variation_location_details vld
         JOIN variations v ON v.id = vld.variation_id
         JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
-        LEFT JOIN categories c ON c.id = p.category_id
+        LEFT JOIN categories c  ON c.id  = p.category_id
+        LEFT JOIN categories sc ON sc.id = p.sub_category_id
+        WHERE 1=1 {$extra}
         GROUP BY v.id
         HAVING SUM(vld.qty_available) <= 0
         ORDER BY p.name
         LIMIT :lim
     ");
-    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    foreach ($params as $key => $val) $st->bindValue($key, $val);
     $st->bindValue(':lim', $limit, PDO::PARAM_INT);
     $st->execute();
     return $st->fetchAll();
@@ -449,10 +473,13 @@ function get_best_selling_products(
 
 // ── Restock requirement to reach a minimum stock level ─────────────────────────
 
-function get_restock_requirements(float $min_stock = 4): array
+function get_restock_requirements(float $min_stock = 4, ?int $category_id = null, ?string $sub_category = null): array
 {
     $db  = get_db();
     $bid = business_id();
+
+    $params = [':bid' => $bid];
+    $extra  = _category_filter_sql($params, $category_id, $sub_category);
 
     $st = $db->prepare("
         SELECT p.name AS product,
@@ -463,12 +490,14 @@ function get_restock_requirements(float $min_stock = 4): array
         FROM variation_location_details vld
         JOIN variations v ON v.id = vld.variation_id
         JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
-        LEFT JOIN categories c ON c.id = p.category_id
+        LEFT JOIN categories c  ON c.id  = p.category_id
+        LEFT JOIN categories sc ON sc.id = p.sub_category_id
+        WHERE 1=1 {$extra}
         GROUP BY v.id
         HAVING SUM(vld.qty_available) < :min_stock
         ORDER BY qty ASC
     ");
-    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    foreach ($params as $key => $val) $st->bindValue($key, $val);
     $st->bindValue(':min_stock', $min_stock);
     $st->execute();
     $rows = $st->fetchAll();
