@@ -6,8 +6,8 @@ $page_title    = 'Low Stock Alerts';
 $page_subtitle = 'Items at or below alert threshold, including out-of-stock variations';
 
 try {
-    $low = get_low_stock_items();
-    $out = get_out_of_stock_items();
+    $low = get_low_stock_items(200);
+    $out = get_out_of_stock_items(200);
     $db_error = null;
 } catch (Exception $e) {
     $db_error = $e->getMessage();

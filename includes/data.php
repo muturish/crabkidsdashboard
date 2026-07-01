@@ -223,27 +223,57 @@ function get_top_stock_value(int $limit = 10): array
 
 // ── Low stock ─────────────────────────────────────────────────────────────────
 
-function get_low_stock_items(): array
+function get_low_stock_items(int $limit = 20): array
 {
     $db  = get_db();
     $bid = business_id();
 
     $st = $db->prepare("
         SELECT p.name AS product,
+               v.name AS variation,
                SUM(vld.qty_available) AS qty,
                p.alert_quantity,
                c.name AS category
         FROM variation_location_details vld
+        JOIN variations v ON v.id = vld.variation_id
         JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
         LEFT JOIN categories c ON c.id = p.category_id
-        WHERE p.alert_quantity IS NOT NULL
-          AND vld.qty_available > 0
-          AND vld.qty_available <= p.alert_quantity
-        GROUP BY p.id
+        WHERE p.alert_quantity IS NOT NULL AND p.alert_quantity > 0
+        GROUP BY v.id
+        HAVING SUM(vld.qty_available) > 0 AND SUM(vld.qty_available) <= p.alert_quantity
         ORDER BY qty ASC
-        LIMIT 20
+        LIMIT :lim
     ");
-    $st->execute([':bid' => $bid]);
+    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
+}
+
+// ── Out of stock ──────────────────────────────────────────────────────────────
+
+function get_out_of_stock_items(int $limit = 200): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $st = $db->prepare("
+        SELECT p.name AS product,
+               v.name AS variation,
+               SUM(vld.qty_available) AS qty,
+               c.name AS category
+        FROM variation_location_details vld
+        JOIN variations v ON v.id = vld.variation_id
+        JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
+        LEFT JOIN categories c ON c.id = p.category_id
+        GROUP BY v.id
+        HAVING SUM(vld.qty_available) <= 0
+        ORDER BY p.name
+        LIMIT :lim
+    ");
+    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
     return $st->fetchAll();
 }
 
