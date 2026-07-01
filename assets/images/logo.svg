@@ -1,0 +1,35 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CrabKids logo">
+  <rect x="0" y="0" width="64" height="64" rx="16" fill="#1d4ed8"/>
+
+  <g stroke="#f97316" stroke-width="3" stroke-linecap="round" fill="none">
+    <!-- legs -->
+    <path d="M21,42 L14,46"/>
+    <path d="M22,46 L15,51"/>
+    <path d="M24,49 L18,55"/>
+    <path d="M43,42 L50,46"/>
+    <path d="M42,46 L49,51"/>
+    <path d="M40,49 L46,55"/>
+    <!-- claw arms -->
+    <path d="M20,34 L12,30" stroke-width="4.5"/>
+    <path d="M44,34 L52,30" stroke-width="4.5"/>
+    <!-- eye stalks -->
+    <path d="M24,30 L20,21" stroke-width="2.2"/>
+    <path d="M40,30 L44,21" stroke-width="2.2"/>
+  </g>
+
+  <!-- claws -->
+  <ellipse cx="9" cy="25" rx="6.5" ry="7.5" transform="rotate(-25 9 25)" fill="#f97316"/>
+  <ellipse cx="55" cy="25" rx="6.5" ry="7.5" transform="rotate(25 55 25)" fill="#f97316"/>
+
+  <!-- body -->
+  <ellipse cx="32" cy="37" rx="13" ry="9" fill="#f97316"/>
+
+  <!-- eyes -->
+  <circle cx="20" cy="20" r="3.4" fill="#ffffff"/>
+  <circle cx="44" cy="20" r="3.4" fill="#ffffff"/>
+  <circle cx="20.8" cy="20.8" r="1.4" fill="#1d4ed8"/>
+  <circle cx="43.2" cy="20.8" r="1.4" fill="#1d4ed8"/>
+
+  <!-- smile -->
+  <path d="M27,39 Q32,43 37,39" stroke="#c2410c" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+</svg>

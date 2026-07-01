@@ -17,7 +17,7 @@
 <header class="ck-topbar">
   <button class="ck-burger" id="sidebarBtn"><i class="bi bi-list"></i></button>
   <a href="/index.php" class="text-decoration-none d-flex align-items-center gap-2">
-    <img src="/assets/images/logo.avif" alt="Logo" class="ck-topbar-logo">
+    <img src="/assets/images/logo.svg" alt="CrabKids logo" class="ck-topbar-logo">
     <div>
       <div class="ck-topbar-name">CrabKids Kenya</div>
       <div class="ck-topbar-sub">Stock Dashboard</div>
