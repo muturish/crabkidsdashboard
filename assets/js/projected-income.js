@@ -62,7 +62,8 @@
   }
 
   function readInputs() {
-    fyStart = parseInt($('sel-fy').value, 10) || new Date().getFullYear();
+    var fySel = $('sel-fy');
+    fyStart = fySel ? (parseInt(fySel.value, 10) || new Date().getFullYear()) : new Date().getFullYear();
     var current     = num('inp-current-income', 0);
     var growth      = num('inp-growth-rate', 0);
     var additional  = num('inp-additional-income', 0);

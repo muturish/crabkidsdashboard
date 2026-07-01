@@ -61,7 +61,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Filters (server-side: re-baselines the default income from real sales data) -->
 <form method="GET" action="" class="ck-filter ck-no-print">
-  <select name="fy" class="form-select form-select-sm w-auto">
+  <select name="fy" id="sel-fy" class="form-select form-select-sm w-auto">
     <?php for ($y = $this_year - 1; $y <= $this_year + 3; $y++): ?>
       <option value="<?= $y ?>" <?= $fy === $y ? 'selected' : '' ?>>FY <?= $y ?></option>
     <?php endfor; ?>
