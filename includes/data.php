@@ -807,6 +807,7 @@ function ensure_purchase_targets_table(): void
             business_id INT UNSIGNED NOT NULL,
             purchase_amount DECIMAL(15,2) NOT NULL,
             mpesa_balance DECIMAL(15,2) NOT NULL,
+            bank_balance DECIMAL(15,2) NOT NULL DEFAULT 0,
             deficit DECIMAL(15,2) NOT NULL,
             deficit_pct DECIMAL(8,2) NOT NULL,
             notes VARCHAR(255) NULL,
@@ -814,25 +815,36 @@ function ensure_purchase_targets_table(): void
             KEY business_id (business_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    // Self-heal: add bank_balance for installs created before this column existed.
+    $has_col = $db->query("
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'purchase_targets' AND column_name = 'bank_balance'
+    ")->fetchColumn();
+    if (!$has_col) {
+        $db->exec("ALTER TABLE purchase_targets ADD COLUMN bank_balance DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER mpesa_balance");
+    }
 }
 
-function save_purchase_target(float $purchase_amount, float $mpesa_balance, ?string $notes = null): array
+function save_purchase_target(float $purchase_amount, float $mpesa_balance, float $bank_balance = 0, ?string $notes = null): array
 {
     $db  = get_db();
     $bid = business_id();
     ensure_purchase_targets_table();
 
-    $deficit     = $purchase_amount - $mpesa_balance;
+    $available   = $mpesa_balance + $bank_balance;
+    $deficit     = $purchase_amount - $available;
     $deficit_pct = $purchase_amount > 0 ? ($deficit / $purchase_amount * 100) : 0;
 
     $st = $db->prepare("
-        INSERT INTO purchase_targets (business_id, purchase_amount, mpesa_balance, deficit, deficit_pct, notes)
-        VALUES (:bid, :purchase_amount, :mpesa_balance, :deficit, :deficit_pct, :notes)
+        INSERT INTO purchase_targets (business_id, purchase_amount, mpesa_balance, bank_balance, deficit, deficit_pct, notes)
+        VALUES (:bid, :purchase_amount, :mpesa_balance, :bank_balance, :deficit, :deficit_pct, :notes)
     ");
     $st->execute([
         ':bid'             => $bid,
         ':purchase_amount' => $purchase_amount,
         ':mpesa_balance'   => $mpesa_balance,
+        ':bank_balance'    => $bank_balance,
         ':deficit'         => $deficit,
         ':deficit_pct'     => $deficit_pct,
         ':notes'           => $notes,
@@ -848,7 +860,7 @@ function get_purchase_targets(int $limit = 50): array
     ensure_purchase_targets_table();
 
     $st = $db->prepare("
-        SELECT id, purchase_amount, mpesa_balance, deficit, deficit_pct, notes, created_at
+        SELECT id, purchase_amount, mpesa_balance, bank_balance, deficit, deficit_pct, notes, created_at
         FROM purchase_targets
         WHERE business_id = :bid
         ORDER BY created_at DESC

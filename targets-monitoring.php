@@ -3,7 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/includes/data.php';
 
 $page_title    = 'Targets Monitoring';
-$page_subtitle = 'Check your next purchase amount against your live M-Pesa balance and track the deficit over time';
+$page_subtitle = 'Check your next purchase amount against your M-Pesa + bank balance and track the deficit over time';
 
 // Handle delete (GET, redirect after)
 if (isset($_GET['delete']) && ctype_digit($_GET['delete'])) {
@@ -15,20 +15,22 @@ if (isset($_GET['delete']) && ctype_digit($_GET['delete'])) {
 // Handle save (POST, redirect after to avoid resubmission on refresh)
 // The M-Pesa balance is never trusted from the client -- it's re-read from the
 // mpesa_transactions log at save time, same as the live figure shown on screen.
+// The bank balance has no equivalent data source, so it's manual entry.
 $save_error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase_amount'])) {
     $purchase_amount = is_numeric($_POST['purchase_amount']) ? (float)$_POST['purchase_amount'] : null;
+    $bank_balance    = is_numeric($_POST['bank_balance'] ?? null) ? (float)$_POST['bank_balance'] : 0.0;
     $notes           = trim($_POST['notes'] ?? '') !== '' ? trim($_POST['notes']) : null;
 
-    if ($purchase_amount === null || $purchase_amount < 0) {
-        $save_error = 'Enter a valid, non-negative purchase amount.';
+    if ($purchase_amount === null || $purchase_amount < 0 || $bank_balance < 0) {
+        $save_error = 'Enter valid, non-negative amounts.';
     } else {
         try {
             $mpesa_now = get_latest_mpesa_balance();
             if ($mpesa_now === null) {
                 $save_error = 'No M-Pesa balance found yet in mpesa_transactions — cannot save a check.';
             } else {
-                save_purchase_target($purchase_amount, (float)$mpesa_now['balance'], $notes);
+                save_purchase_target($purchase_amount, (float)$mpesa_now['balance'], $bank_balance, $notes);
                 header('Location: targets-monitoring.php');
                 exit;
             }
@@ -55,30 +57,33 @@ $latest = $history[0] ?? null;
 $j_labels        = json_encode(array_map(fn($r) => date('d M', strtotime($r['created_at'])), array_reverse($history)));
 $j_deficit       = json_encode(array_map(fn($r) => round((float)$r['deficit']), array_reverse($history)));
 $j_target        = json_encode(array_map(fn($r) => round((float)$r['purchase_amount']), array_reverse($history)));
-$j_balance       = json_encode(array_map(fn($r) => round((float)$r['mpesa_balance']), array_reverse($history)));
+$j_available     = json_encode(array_map(fn($r) => round((float)$r['mpesa_balance'] + (float)$r['bank_balance']), array_reverse($history)));
 $j_mpesa_balance = json_encode($mpesa ? (float)$mpesa['balance'] : 0);
 
 $inline_scripts = <<<JS
 (function(){var c=document.getElementById('targetChart');if(!c||!{$j_labels}.length)return;new Chart(c,{type:'line',data:{labels:{$j_labels},datasets:[
   {label:'Purchase Target',data:{$j_target},borderColor:'#1d4ed8',backgroundColor:'rgba(29,78,216,.08)',fill:false,tension:0.3},
-  {label:'M-Pesa Balance',data:{$j_balance},borderColor:'#059669',backgroundColor:'rgba(5,150,105,.08)',fill:false,tension:0.3},
+  {label:'Available Funds (M-Pesa + Bank)',data:{$j_available},borderColor:'#059669',backgroundColor:'rgba(5,150,105,.08)',fill:false,tension:0.3},
   {label:'Deficit',data:{$j_deficit},borderColor:'#dc2626',backgroundColor:'rgba(220,38,38,.08)',fill:true,tension:0.3}
 ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'},tooltip:{callbacks:{label:function(c){return c.dataset.label+': KES '+c.parsed.y.toLocaleString();}}}},scales:{x:{grid:{display:false}},y:{ticks:{callback:function(v){return 'KES '+(v/1000).toFixed(0)+'k';}}}}}});})();
 
 (function(){
   var pa=document.getElementById('inp-purchase-amount');
+  var ba=document.getElementById('inp-bank-balance');
   var out=document.getElementById('live-preview');
   var mpesaBalance={$j_mpesa_balance};
   function fmt(n){return 'KES '+Math.round(n).toLocaleString();}
   function render(){
-    var p=parseFloat(pa.value)||0, m=mpesaBalance;
-    var deficit=p-m, pct=p>0?(deficit/p*100):0;
+    var p=parseFloat(pa.value)||0, b=parseFloat(ba.value)||0;
+    var available=mpesaBalance+b;
+    var deficit=p-available, pct=p>0?(deficit/p*100):0;
     var ok=deficit<=0;
-    out.innerHTML = ok
-      ? '<span class="ck-status ok">Fully Funded</span> Surplus of '+fmt(-deficit)+' ('+Math.abs(pct).toFixed(1)+'% above target)'
-      : '<span class="ck-status critical">Shortfall</span> Short by '+fmt(deficit)+' ('+pct.toFixed(1)+'% of purchase amount)';
+    out.innerHTML = 'Available: <strong>'+fmt(available)+'</strong> (M-Pesa '+fmt(mpesaBalance)+' + Bank '+fmt(b)+') — '
+      + (ok
+        ? '<span class="ck-status ok">Fully Funded</span> Surplus of '+fmt(-deficit)+' ('+Math.abs(pct).toFixed(1)+'% above target)'
+        : '<span class="ck-status critical">Shortfall</span> Short by '+fmt(deficit)+' ('+pct.toFixed(1)+'% of purchase amount)');
   }
-  if(pa){pa.addEventListener('input',render);render();}
+  if(pa&&ba){pa.addEventListener('input',render);ba.addEventListener('input',render);render();}
 })();
 JS;
 
@@ -94,29 +99,44 @@ require_once __DIR__ . '/includes/header.php';
 </div>
 
 <!-- Latest check KPIs -->
+<?php $latest_available = $latest ? (float)$latest['mpesa_balance'] + (float)$latest['bank_balance'] : 0; ?>
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4 col-xl-2">
     <div class="ck-kpi kpi-blue">
-      <div class="ck-kpi-head"><p class="ck-kpi-label">Latest Purchase Target</p><span class="ck-kpi-icon"><i class="bi bi-cart4"></i></span></div>
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Purchase Target</p><span class="ck-kpi-icon"><i class="bi bi-cart4"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= $latest ? number_format((float)$latest['purchase_amount']) : '0' ?></div>
       <div class="ck-kpi-sub"><?= $latest ? date('d M Y, H:i', strtotime($latest['created_at'])) : 'no checks yet' ?></div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4 col-xl-2">
     <div class="ck-kpi kpi-green">
-      <div class="ck-kpi-head"><p class="ck-kpi-label">Latest M-Pesa Balance</p><span class="ck-kpi-icon"><i class="bi bi-phone"></i></span></div>
+      <div class="ck-kpi-head"><p class="ck-kpi-label">M-Pesa Balance</p><span class="ck-kpi-icon"><i class="bi bi-phone"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= $latest ? number_format((float)$latest['mpesa_balance']) : '0' ?></div>
       <div class="ck-kpi-sub">at time of that check</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="ck-kpi kpi-sky">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Bank Balance</p><span class="ck-kpi-icon"><i class="bi bi-bank"></i></span></div>
+      <div class="ck-kpi-val sm">KES <?= $latest ? number_format((float)$latest['bank_balance']) : '0' ?></div>
+      <div class="ck-kpi-sub">at time of that check</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="ck-kpi kpi-slate">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Available Funds</p><span class="ck-kpi-icon"><i class="bi bi-wallet2"></i></span></div>
+      <div class="ck-kpi-val sm">KES <?= number_format($latest_available) ?></div>
+      <div class="ck-kpi-sub">M-Pesa + Bank</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
     <div class="ck-kpi <?= $latest && (float)$latest['deficit'] > 0 ? 'kpi-red' : 'kpi-green' ?>">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Deficit</p><span class="ck-kpi-icon"><i class="bi bi-exclamation-diamond"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= $latest ? number_format((float)$latest['deficit']) : '0' ?></div>
       <div class="ck-kpi-sub"><?= $latest && (float)$latest['deficit'] > 0 ? 'short of target' : 'fully funded / surplus' ?></div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-4 col-xl-2">
     <div class="ck-kpi <?= $latest && (float)$latest['deficit'] > 0 ? 'kpi-amber' : 'kpi-green' ?>">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Deficit %</p><span class="ck-kpi-icon"><i class="bi bi-percent"></i></span></div>
       <div class="ck-kpi-val sm"><?= $latest ? number_format((float)$latest['deficit_pct'], 1) : '0.0' ?>%</div>
@@ -140,20 +160,24 @@ require_once __DIR__ . '/includes/header.php';
     <?php endif; ?>
     <form method="POST" action="">
       <div class="row g-3 align-items-end">
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
           <label class="form-label ck-kpi-label">Next Purchase Total (KES)</label>
           <input type="number" id="inp-purchase-amount" name="purchase_amount" class="form-control form-control-sm" min="0" step="100" value="<?= (int)$suggested ?>">
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
           <label class="form-label ck-kpi-label">M-Pesa Balance (live)</label>
           <div class="form-control form-control-sm bg-light fw-bold" style="color:#059669;">KES <?= $mpesa ? number_format((float)$mpesa['balance']) : '0' ?></div>
           <small class="text-muted"><?= $mpesa ? 'as of ' . date('d M Y, H:i', strtotime($mpesa['created_at'])) : 'no data yet' ?></small>
         </div>
-        <div class="col-12 col-md-4">
+        <div class="col-6 col-md-2">
+          <label class="form-label ck-kpi-label">Bank Balance (KES)</label>
+          <input type="number" id="inp-bank-balance" name="bank_balance" class="form-control form-control-sm" min="0" step="100" value="0">
+        </div>
+        <div class="col-6 col-md-3">
           <label class="form-label ck-kpi-label">Notes (optional)</label>
           <input type="text" name="notes" class="form-control form-control-sm" maxlength="255" placeholder="e.g. Boys size restock order">
         </div>
-        <div class="col-12 col-md-2">
+        <div class="col-12 col-md-3">
           <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-save me-1"></i>Save Check</button>
         </div>
       </div>
@@ -166,7 +190,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="d-flex align-items-center justify-content-between mb-3"><span class="ck-label">Deficit Trend</span><span class="ck-chip ck-chip-blue"><?= count($history) ?> checks</span></div>
 <div class="card mb-4">
   <div class="card-header d-flex align-items-center justify-content-between gap-2">
-    <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-graph-up-arrow"></i></span>Purchase Target vs. M-Pesa Balance</h6>
+    <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-graph-up-arrow"></i></span>Purchase Target vs. Available Funds</h6>
     <small class="text-muted">Most recent 50 checks</small>
   </div>
   <div class="card-body">
@@ -190,7 +214,8 @@ require_once __DIR__ . '/includes/header.php';
           <tr>
             <th>Date</th>
             <th class="text-end">Purchase Target</th>
-            <th class="text-end">M-Pesa Balance</th>
+            <th class="text-end">M-Pesa</th>
+            <th class="text-end">Bank</th>
             <th class="text-end">Deficit</th>
             <th class="text-end">Deficit %</th>
             <th class="text-center">Status</th>
@@ -204,6 +229,7 @@ require_once __DIR__ . '/includes/header.php';
             <td class="text-muted"><?= date('d M Y, H:i', strtotime($r['created_at'])) ?></td>
             <td class="text-end fw-semibold">KES <?= number_format((float)$r['purchase_amount']) ?></td>
             <td class="text-end">KES <?= number_format((float)$r['mpesa_balance']) ?></td>
+            <td class="text-end">KES <?= number_format((float)$r['bank_balance']) ?></td>
             <td class="text-end fw-bold" style="color:<?= $deficit > 0 ? '#dc2626' : '#059669' ?>">KES <?= number_format($deficit) ?></td>
             <td class="text-end"><?= number_format((float)$r['deficit_pct'], 1) ?>%</td>
             <td class="text-center">
