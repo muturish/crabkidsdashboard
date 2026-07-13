@@ -38,19 +38,18 @@ $j_rdays = json_encode(array_column($revenue,  'day'));
 $j_rev   = json_encode(array_column($revenue,  'revenue'));
 $j_clbl  = json_encode(array_column($categories,'category'));
 $j_cval  = json_encode(array_column($categories,'total_qty'));
+$j_ccol  = json_encode(array_map('category_color_hex', array_column($categories,'category')));
 $j_mlbl  = json_encode(array_column($monthly,  'month'));
 $j_mrev  = json_encode(array_column($monthly,  'revenue'));
 
 $inline_scripts = <<<JS
-var PAL=['#1d4ed8','#f97316','#059669','#0284c7','#7c3aed','#d97706','#db2777','#0f766e','#c2410c','#4338ca'];
-
 (function(){var c=document.getElementById('movChart');if(!c)return;new Chart(c,{type:'bar',data:{labels:{$j_days},datasets:[{label:'Received',data:{$j_recv},backgroundColor:'rgba(29,78,216,.75)'},{label:'Sold',data:{$j_sold},backgroundColor:'rgba(249,115,22,.75)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:true}}}});})();
 
 (function(){var c=document.getElementById('cumChart');if(!c)return;new Chart(c,{type:'line',data:{labels:{$j_days},datasets:[{label:'Net Change',data:{$j_cumul},borderColor:'#1d4ed8',backgroundColor:'rgba(29,78,216,.08)',fill:true,pointRadius:{$j_days}.length>60?0:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{}}}});})();
 
 (function(){var c=document.getElementById('revChart');if(!c)return;new Chart(c,{type:'line',data:{labels:{$j_rdays},datasets:[{label:'Revenue (KES)',data:{$j_rev},borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.1)',fill:true,pointRadius:{$j_rdays}.length>60?0:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'},tooltip:{callbacks:{label:function(c){return'KES '+c.parsed.y.toLocaleString();}}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:true,ticks:{callback:function(v){return'KES '+(v/1000).toFixed(0)+'k';}}}}}});})();
 
-(function(){var c=document.getElementById('catChart');if(!c||!{$j_clbl}.length)return;new Chart(c,{type:'doughnut',data:{labels:{$j_clbl},datasets:[{data:{$j_cval},backgroundColor:PAL,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom'}}}});})();
+(function(){var c=document.getElementById('catChart');if(!c||!{$j_clbl}.length)return;new Chart(c,{type:'doughnut',data:{labels:{$j_clbl},datasets:[{data:{$j_cval},backgroundColor:{$j_ccol},borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom'}}}});})();
 
 (function(){var c=document.getElementById('monChart');if(!c||!{$j_mlbl}.length)return;new Chart(c,{type:'bar',data:{labels:{$j_mlbl},datasets:[{label:'Revenue (KES)',data:{$j_mrev},backgroundColor:'rgba(29,78,216,.75)',borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{callback:function(v){return'KES '+(v/1000).toFixed(0)+'k';}}}}}});})();
 
@@ -266,12 +265,13 @@ require_once __DIR__ . '/includes/header.php';
             <?php foreach ($categories as $i => $r):
               $pct = round((float)$r['total_qty'] / $mxc * 100);
               $rc  = $i===0?'r1':($i===1?'r2':($i===2?'r3':''));
+              $cc  = category_color_hex($r['category']);
             ?>
               <tr>
                 <td style="text-align:center;"><span class="ck-rank <?= $rc ?>"><?= $i+1 ?></span></td>
-                <td class="fw-semibold"><?= htmlspecialchars($r['category']) ?></td>
-                <td class="text-end fw-bold" style="color:#1d4ed8"><?= number_format((float)$r['total_qty']) ?></td>
-                <td><div class="ck-prog"><div class="ck-prog-track"><div class="ck-prog-fill" style="width:<?= $pct ?>%"></div></div><span class="ck-prog-pct"><?= $pct ?>%</span></div></td>
+                <td class="fw-semibold"><span class="ck-chip <?= category_chip_class($r['category']) ?>"><?= htmlspecialchars($r['category']) ?></span></td>
+                <td class="text-end fw-bold" style="color:<?= $cc ?>"><?= number_format((float)$r['total_qty']) ?></td>
+                <td><div class="ck-prog"><div class="ck-prog-track"><div class="ck-prog-fill" style="width:<?= $pct ?>%;background:<?= $cc ?>"></div></div><span class="ck-prog-pct"><?= $pct ?>%</span></div></td>
               </tr>
             <?php endforeach; ?>
             </tbody>
@@ -331,7 +331,7 @@ require_once __DIR__ . '/includes/header.php';
       <?php foreach ($low_stock as $r): ?>
         <tr>
           <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
-          <td class="hide-sm"><span class="ck-chip ck-chip-slate"><?= htmlspecialchars($r['category'] ?? '—') ?></span></td>
+          <td class="hide-sm"><?php if ($r['category']): ?><span class="ck-chip <?= category_chip_class($r['category']) ?>"><?= htmlspecialchars($r['category']) ?></span><?php else: ?>—<?php endif; ?></td>
           <td class="text-center"><?= number_format((float)$r['alert_quantity']) ?></td>
           <td class="text-center fw-bold <?= (float)$r['qty']<=0?'text-danger':'text-warning' ?>"><?= number_format((float)$r['qty']) ?></td>
           <td class="text-center">

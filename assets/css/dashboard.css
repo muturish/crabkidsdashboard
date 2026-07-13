@@ -415,6 +415,7 @@ body {
 .ck-chip-red    { background: #fef2f2; color: #dc2626; }
 .ck-chip-amber  { background: #fffbeb; color: #d97706; }
 .ck-chip-slate  { background: #f1f5f9; color: #334155; }
+.ck-chip-pink   { background: #fdf2f8; color: #db2777; }
 
 /* ── 14. STATUS BADGE ───────────────────────────────────────── */
 .ck-status {

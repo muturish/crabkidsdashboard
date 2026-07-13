@@ -1,4 +1,28 @@
 <?php
+// ── Category color coding (Boys = blue, Girls = pink, Unisex = orange) ────────
+// Used everywhere a category name is charted or badged, so the same category
+// always reads the same color across every page.
+
+function category_color_key(string $name): string
+{
+    $n = strtolower($name);
+    if (str_contains($n, 'boy'))    return 'blue';
+    if (str_contains($n, 'girl'))   return 'pink';
+    if (str_contains($n, 'unisex')) return 'orange';
+    return 'slate';
+}
+
+function category_color_hex(string $name): string
+{
+    static $map = ['blue' => '#1d4ed8', 'pink' => '#db2777', 'orange' => '#f97316', 'slate' => '#64748b'];
+    return $map[category_color_key($name)];
+}
+
+function category_chip_class(string $name): string
+{
+    return 'ck-chip-' . category_color_key($name);
+}
+
 // ── KPI cards ─────────────────────────────────────────────────────────────────
 
 function get_kpis(): array

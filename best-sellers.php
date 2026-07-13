@@ -131,7 +131,7 @@ require_once __DIR__ . '/includes/header.php';
           <td style="text-align:center;"><span class="ck-rank <?= $rc ?>"><?= $i+1 ?></span></td>
           <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
           <td class="hide-sm"><span class="ck-chip ck-chip-slate"><?= htmlspecialchars($r['brand'] ?? '—') ?></span></td>
-          <td class="hide-sm"><?= htmlspecialchars($r['category'] ?? '—') ?></td>
+          <td class="hide-sm"><?php if ($r['category']): ?><span class="ck-chip <?= category_chip_class($r['category']) ?>"><?= htmlspecialchars($r['category']) ?></span><?php else: ?>—<?php endif; ?></td>
           <td class="hide-sm"><?= htmlspecialchars($r['sub_category'] ?? '—') ?></td>
           <td class="text-end fw-bold" style="color:#1d4ed8"><?= number_format((float)$r['qty_sold']) ?></td>
           <td class="text-end hide-sm">KES <?= number_format((float)$r['revenue']) ?></td>

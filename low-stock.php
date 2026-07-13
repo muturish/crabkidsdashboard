@@ -98,7 +98,7 @@ require_once __DIR__ . '/includes/header.php';
           <tr>
             <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
             <td><span class="ck-chip ck-chip-slate"><?= htmlspecialchars($r['variation']) ?></span></td>
-            <td class="text-muted hide-sm"><?= htmlspecialchars($r['category'] ?? '—') ?></td>
+            <td class="hide-sm"><?php if ($r['category']): ?><span class="ck-chip <?= category_chip_class($r['category']) ?>"><?= htmlspecialchars($r['category']) ?></span><?php else: ?>—<?php endif; ?></td>
             <td class="text-center fw-bold <?= (float)$r['qty']<=0?'text-danger':'text-warning' ?>"><?= number_format((float)$r['qty']) ?></td>
             <td class="text-center">+<?= number_format($r['shortfall']) ?></td>
             <td class="text-end text-muted hide-sm">KES <?= number_format((float)$r['purchase_price']) ?></td>
@@ -138,7 +138,7 @@ require_once __DIR__ . '/includes/header.php';
           <tr>
             <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
             <td><span class="ck-chip ck-chip-slate"><?= htmlspecialchars($r['variation']) ?></span></td>
-            <td class="text-muted hide-sm"><?= htmlspecialchars($r['category']??'—') ?></td>
+            <td class="hide-sm"><?php if ($r['category']): ?><span class="ck-chip <?= category_chip_class($r['category']) ?>"><?= htmlspecialchars($r['category']) ?></span><?php else: ?>—<?php endif; ?></td>
             <td class="text-center"><?= number_format((float)$alert) ?></td>
             <td class="text-center fw-bold <?= (float)$qty<=0?'text-danger':'text-warning' ?>"><?= number_format((float)$qty) ?></td>
             <td class="text-center">
@@ -167,7 +167,7 @@ require_once __DIR__ . '/includes/header.php';
           <tr>
             <td class="fw-semibold"><?= htmlspecialchars($r['product']) ?></td>
             <td><span class="ck-chip ck-chip-slate"><?= htmlspecialchars($r['variation']) ?></span></td>
-            <td class="text-muted hide-sm"><?= htmlspecialchars($r['category']??'—') ?></td>
+            <td class="hide-sm"><?php if ($r['category']): ?><span class="ck-chip <?= category_chip_class($r['category']) ?>"><?= htmlspecialchars($r['category']) ?></span><?php else: ?>—<?php endif; ?></td>
             <td class="text-center"><span class="ck-status out">Out of Stock</span></td>
           </tr>
         <?php endforeach; ?>

@@ -37,7 +37,7 @@ foreach($sg as $i=>$sz){
 $cd=[];
 foreach($cg as $i=>$cat){
   $data=array_map(fn($d)=>$cp[$d][$cat]??0,$cl);
-  $cd[]=['label'=>$cat,'data'=>$data,'backgroundColor'=>$pal[$i%count($pal)],'stack'=>'c'];
+  $cd[]=['label'=>$cat,'data'=>$data,'backgroundColor'=>category_color_hex($cat),'stack'=>'c'];
 }
 
 $total_sold=array_sum(array_map(fn($d)=>array_sum($d),$sp));
@@ -148,12 +148,12 @@ require_once __DIR__ . '/includes/header.php';
     <table class="table table-hover mb-0">
       <thead><tr><th style="width:40px;text-align:center;">#</th><th>Category</th><th class="text-end">Units Sold</th><th class="hide-sm" style="width:150px;">Share</th></tr></thead>
       <tbody>
-      <?php $rk=1;foreach($ct as $cat=>$total):?>
+      <?php $rk=1;foreach($ct as $cat=>$total): $cc=category_color_hex($cat);?>
         <tr>
           <td style="text-align:center;"><span class="ck-rank <?= $rk===1?'r1':($rk===2?'r2':($rk===3?'r3':'')) ?>"><?= $rk++ ?></span></td>
-          <td class="fw-semibold"><?= htmlspecialchars($cat) ?></td>
-          <td class="text-end fw-bold" style="color:#f97316"><?= number_format($total) ?></td>
-          <td class="hide-sm"><div class="ck-prog"><div class="ck-prog-track"><div class="ck-prog-fill or" style="width:<?= round($total/$mx2*100) ?>%"></div></div><span class="ck-prog-pct"><?= round($total/$mx2*100) ?>%</span></div></td>
+          <td class="fw-semibold"><span class="ck-chip <?= category_chip_class($cat) ?>"><?= htmlspecialchars($cat) ?></span></td>
+          <td class="text-end fw-bold" style="color:<?= $cc ?>"><?= number_format($total) ?></td>
+          <td class="hide-sm"><div class="ck-prog"><div class="ck-prog-track"><div class="ck-prog-fill" style="width:<?= round($total/$mx2*100) ?>%;background:<?= $cc ?>"></div></div><span class="ck-prog-pct"><?= round($total/$mx2*100) ?>%</span></div></td>
         </tr>
       <?php endforeach;?>
       </tbody>
