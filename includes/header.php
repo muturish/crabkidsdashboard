@@ -67,6 +67,12 @@
       Projected Income
     </a>
 
+    <a href="/targets-monitoring.php"
+       class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'targets-monitoring.php' ? 'active' : '' ?>">
+      <span class="ck-nav-icon"><i class="bi bi-bullseye"></i></span>
+      Targets Monitoring
+    </a>
+
     <a href="/low-stock.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'low-stock.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-exclamation-triangle"></i></span>

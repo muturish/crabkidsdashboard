@@ -587,3 +587,83 @@ function get_monthly_summary(int $months = 6): array
     $st->execute();
     return $st->fetchAll();
 }
+
+// ── Targets Monitoring: purchase amount vs. M-Pesa balance ────────────────────
+
+function ensure_purchase_targets_table(): void
+{
+    $db = get_db();
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS purchase_targets (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            business_id INT UNSIGNED NOT NULL,
+            purchase_amount DECIMAL(15,2) NOT NULL,
+            mpesa_balance DECIMAL(15,2) NOT NULL,
+            deficit DECIMAL(15,2) NOT NULL,
+            deficit_pct DECIMAL(8,2) NOT NULL,
+            notes VARCHAR(255) NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY business_id (business_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+}
+
+function save_purchase_target(float $purchase_amount, float $mpesa_balance, ?string $notes = null): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_purchase_targets_table();
+
+    $deficit     = $purchase_amount - $mpesa_balance;
+    $deficit_pct = $purchase_amount > 0 ? ($deficit / $purchase_amount * 100) : 0;
+
+    $st = $db->prepare("
+        INSERT INTO purchase_targets (business_id, purchase_amount, mpesa_balance, deficit, deficit_pct, notes)
+        VALUES (:bid, :purchase_amount, :mpesa_balance, :deficit, :deficit_pct, :notes)
+    ");
+    $st->execute([
+        ':bid'             => $bid,
+        ':purchase_amount' => $purchase_amount,
+        ':mpesa_balance'   => $mpesa_balance,
+        ':deficit'         => $deficit,
+        ':deficit_pct'     => $deficit_pct,
+        ':notes'           => $notes,
+    ]);
+
+    return ['deficit' => $deficit, 'deficit_pct' => $deficit_pct];
+}
+
+function get_purchase_targets(int $limit = 50): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_purchase_targets_table();
+
+    $st = $db->prepare("
+        SELECT id, purchase_amount, mpesa_balance, deficit, deficit_pct, notes, created_at
+        FROM purchase_targets
+        WHERE business_id = :bid
+        ORDER BY created_at DESC
+        LIMIT :lim
+    ");
+    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
+}
+
+function delete_purchase_target(int $id): void
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_purchase_targets_table();
+
+    $st = $db->prepare("DELETE FROM purchase_targets WHERE id = :id AND business_id = :bid");
+    $st->execute([':id' => $id, ':bid' => $bid]);
+}
+
+function get_suggested_purchase_amount(): float
+{
+    $rows = get_restock_requirements(4);
+    return array_sum(array_column($rows, 'restock_cost'));
+}
