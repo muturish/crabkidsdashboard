@@ -43,12 +43,6 @@
       Overview
     </a>
 
-    <a href="/stock-growth.php"
-       class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'stock-growth.php' ? 'active' : '' ?>">
-      <span class="ck-nav-icon"><i class="bi bi-graph-up-arrow"></i></span>
-      Stock Trend
-    </a>
-
     <a href="/cumulative-net-change.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'cumulative-net-change.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-graph-up"></i></span>

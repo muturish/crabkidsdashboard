@@ -429,42 +429,6 @@ function get_top_stock_value(int $limit = 10): array
     return $st->fetchAll();
 }
 
-// ── Stock growth (Stock Trend page) ────────────────────────────────────────────
-// Same shape as get_daily_stock_movement() -- kept as a thin alias since
-// stock-growth.php was written against this name.
-function get_stock_growth(string $from, string $to): array
-{
-    return get_daily_stock_movement($from, $to);
-}
-
-function get_top_restocked(string $from, string $to, int $limit = 10): array
-{
-    $db  = get_db();
-    $bid = business_id();
-
-    $st = $db->prepare("
-        SELECT p.name AS product,
-               v.name AS variation,
-               SUM(pl.quantity) AS total_received
-        FROM purchase_lines pl
-        JOIN transactions t ON t.id = pl.transaction_id
-            AND t.type = 'purchase' AND t.status = 'received' AND t.business_id = :bid
-            AND DATE(t.transaction_date) BETWEEN :from AND :to
-        JOIN products p ON p.id = pl.product_id AND p.business_id = :bid2 AND p.is_inactive = 0
-        JOIN variations v ON v.id = pl.variation_id
-        GROUP BY p.id, v.id
-        ORDER BY total_received DESC
-        LIMIT :lim
-    ");
-    $st->bindValue(':bid',  $bid,   PDO::PARAM_INT);
-    $st->bindValue(':bid2', $bid,   PDO::PARAM_INT);
-    $st->bindValue(':from', $from);
-    $st->bindValue(':to',   $to);
-    $st->bindValue(':lim',  $limit, PDO::PARAM_INT);
-    $st->execute();
-    return $st->fetchAll();
-}
-
 // ── Low stock ─────────────────────────────────────────────────────────────────
 
 // Shared category/sub-category WHERE fragment for the stock-level queries below.
