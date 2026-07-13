@@ -9,31 +9,37 @@ $from = isset($_GET['from']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'
 $to   = isset($_GET['to'])   && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'])   ? $_GET['to']   : date('Y-m-d');
 if ($from > $to) [$from, $to] = [$to, $from];
 
+$location_id = isset($_GET['loc']) && ctype_digit($_GET['loc']) ? (int)$_GET['loc'] : null;
+
 try {
-    $kpis       = get_kpis();
-    $movement   = get_daily_stock_movement($from, $to);
-    $revenue    = get_daily_revenue($from, $to);
-    $categories = get_stock_by_category();
-    $subcats    = get_stock_by_subcategory();
-    $top_value  = get_top_stock_value(10);
-    $low_stock  = get_low_stock_items();
-    $monthly    = get_monthly_summary(6);
-    $db_error   = null;
+    $kpis          = get_kpis();
+    $movement      = get_daily_stock_movement($from, $to);
+    $core_movement = get_core_stock_movement($from, $to, $location_id);
+    $locations     = get_business_locations();
+    $revenue       = get_daily_revenue($from, $to);
+    $categories    = get_stock_by_category();
+    $subcats       = get_stock_by_subcategory();
+    $top_value     = get_top_stock_value(10);
+    $low_stock     = get_low_stock_items();
+    $monthly       = get_monthly_summary(6);
+    $db_error      = null;
 } catch (Exception $e) {
     $db_error = $e->getMessage();
     $kpis = ['total_products'=>0,'total_units'=>0,'stock_cost_value'=>0,'stock_sell_value'=>0,'low_stock'=>0,'out_of_stock'=>0,'today_sales'=>0];
-    $movement = $revenue = $categories = $subcats = $top_value = $low_stock = $monthly = [];
+    $movement = $core_movement = $locations = $revenue = $categories = $subcats = $top_value = $low_stock = $monthly = [];
 }
 
 $total_recv = array_sum(array_column($movement, 'received'));
 $total_sold = array_sum(array_column($movement, 'sold'));
-$net_change = !empty($movement) ? end($movement)['cumulative'] : 0;
+$net_change = !empty($core_movement) ? end($core_movement)['cumulative'] : 0;
 $total_rev  = array_sum(array_column($revenue, 'revenue'));
+$location_names = array_column($locations, 'name', 'id');
 
 $j_days  = json_encode(array_column($movement, 'day'));
 $j_recv  = json_encode(array_column($movement, 'received'));
 $j_sold  = json_encode(array_column($movement, 'sold'));
-$j_cumul = json_encode(array_column($movement, 'cumulative'));
+$j_cdays = json_encode(array_column($core_movement, 'day'));
+$j_cumul = json_encode(array_column($core_movement, 'cumulative'));
 $j_rdays = json_encode(array_column($revenue,  'day'));
 $j_rev   = json_encode(array_column($revenue,  'revenue'));
 $j_clbl  = json_encode(array_column($categories,'category'));
@@ -45,7 +51,7 @@ $j_mrev  = json_encode(array_column($monthly,  'revenue'));
 $inline_scripts = <<<JS
 (function(){var c=document.getElementById('movChart');if(!c)return;new Chart(c,{type:'bar',data:{labels:{$j_days},datasets:[{label:'Received',data:{$j_recv},backgroundColor:'rgba(29,78,216,.75)'},{label:'Sold',data:{$j_sold},backgroundColor:'rgba(249,115,22,.75)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:true}}}});})();
 
-(function(){var c=document.getElementById('cumChart');if(!c)return;new Chart(c,{type:'line',data:{labels:{$j_days},datasets:[{label:'Net Change',data:{$j_cumul},borderColor:'#1d4ed8',backgroundColor:'rgba(29,78,216,.08)',fill:true,pointRadius:{$j_days}.length>60?0:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{}}}});})();
+(function(){var c=document.getElementById('cumChart');if(!c)return;new Chart(c,{type:'line',data:{labels:{$j_cdays},datasets:[{label:'Stock Qty (Boys/Girls/Unisex)',data:{$j_cumul},borderColor:'#1d4ed8',backgroundColor:'rgba(29,78,216,.08)',fill:true,pointRadius:{$j_cdays}.length>60?0:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:false}}}});})();
 
 (function(){var c=document.getElementById('revChart');if(!c)return;new Chart(c,{type:'line',data:{labels:{$j_rdays},datasets:[{label:'Revenue (KES)',data:{$j_rev},borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.1)',fill:true,pointRadius:{$j_rdays}.length>60?0:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'},tooltip:{callbacks:{label:function(c){return'KES '+c.parsed.y.toLocaleString();}}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:true,ticks:{callback:function(v){return'KES '+(v/1000).toFixed(0)+'k';}}}}}});})();
 
@@ -123,7 +129,7 @@ require_once __DIR__ . '/includes/header.php';
   <div class="ck-pills">
     <span class="ck-pill"><i class="bi bi-arrow-down-circle" style="color:#1d4ed8"></i> Recv: <strong><?= number_format($total_recv) ?></strong></span>
     <span class="ck-pill"><i class="bi bi-arrow-up-circle" style="color:#f97316"></i> Sold: <strong><?= number_format($total_sold) ?></strong></span>
-    <span class="ck-pill" style="color:<?= $net_change>=0?'#059669':'#dc2626' ?>">Net: <strong><?= ($net_change>=0?'+':'').number_format($net_change) ?></strong></span>
+    <span class="ck-pill" style="color:<?= $net_change>=0?'#059669':'#dc2626' ?>">Boys/Girls/Unisex Stock: <strong><?= number_format($net_change) ?></strong></span>
   </div>
 </div>
 
@@ -133,6 +139,12 @@ require_once __DIR__ . '/includes/header.php';
     <span class="ck-date-sep">→</span>
     <input type="date" id="inp-to" name="to" value="<?= $to ?>">
   </div>
+  <select name="loc" class="form-select form-select-sm w-auto">
+    <option value="">All Stock</option>
+    <?php foreach ($locations as $loc): ?>
+      <option value="<?= $loc['id'] ?>" <?= $location_id === (int)$loc['id'] ? 'selected' : '' ?>><?= htmlspecialchars($loc['name']) ?></option>
+    <?php endforeach; ?>
+  </select>
   <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
   <div class="ck-presets">
     <button type="button" class="ck-p-btn" data-days="7">7D</button>
@@ -157,10 +169,12 @@ require_once __DIR__ . '/includes/header.php';
   </div>
   <div class="col-lg-4">
     <div class="card h-100">
-      <div class="card-header d-flex align-items-center gap-2">
+      <div class="card-header d-flex align-items-center justify-content-between gap-2">
         <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-graph-up"></i></span>Cumulative Net Change</h6>
+        <small class="text-muted">Boys/Girls/Unisex<?= $location_id && isset($location_names[$location_id]) ? ' · ' . htmlspecialchars($location_names[$location_id]) : '' ?></small>
       </div>
       <div class="card-body">
+        <p class="text-muted mb-2" style="font-size:0.75rem;">Anchored to today's actual stock qty (<?= number_format($net_change) ?> units) — earlier points show reconstructed levels</p>
         <div class="ck-chart" style="height:255px;"><canvas id="cumChart"></canvas></div>
       </div>
     </div>

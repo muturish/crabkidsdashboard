@@ -156,6 +156,157 @@ function get_daily_stock_movement(string $from, string $to): array
     return $rows;
 }
 
+// ── Business locations (for the Boys/Girls/Unisex stock filter) ───────────────
+
+function get_business_locations(): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $st = $db->prepare("SELECT id, name FROM business_locations WHERE business_id = :bid AND is_active = 1 ORDER BY name");
+    $st->execute([':bid' => $bid]);
+    return $st->fetchAll();
+}
+
+// Top-level category ids that read as Boys/Girls/Unisex (same matching as category_color_key).
+function get_core_category_ids(): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $st = $db->prepare("SELECT id, name FROM categories WHERE business_id = :bid AND parent_id = 0");
+    $st->execute([':bid' => $bid]);
+
+    $ids = [];
+    foreach ($st->fetchAll() as $c) {
+        if (category_color_key($c['name']) !== 'slate') $ids[] = (int)$c['id'];
+    }
+    return $ids;
+}
+
+// Current total units in stock for Boys/Girls/Unisex products, optionally at one location.
+function get_core_current_stock(?int $location_id = null): float
+{
+    $db       = get_db();
+    $bid      = business_id();
+    $cat_ids  = get_core_category_ids();
+    if (empty($cat_ids)) return 0.0;
+
+    $placeholders = [];
+    $params       = [':bid' => $bid];
+    foreach ($cat_ids as $i => $id) {
+        $key = ':c' . $i;
+        $placeholders[] = $key;
+        $params[$key] = $id;
+    }
+    $in = implode(',', $placeholders);
+
+    $loc_sql = '';
+    if ($location_id) {
+        $loc_sql = ' AND vld.location_id = :loc';
+        $params[':loc'] = $location_id;
+    }
+
+    $st = $db->prepare("
+        SELECT COALESCE(SUM(vld.qty_available), 0)
+        FROM variation_location_details vld
+        JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
+        WHERE p.category_id IN ($in) {$loc_sql}
+    ");
+    $st->execute($params);
+    return (float)$st->fetchColumn();
+}
+
+// Daily received/sold/net for Boys/Girls/Unisex products only, optionally at one
+// location, with the cumulative line anchored to the actual current stock
+// quantity (at $to) instead of an arbitrary zero baseline.
+function get_core_stock_movement(string $from, string $to, ?int $location_id = null): array
+{
+    $db      = get_db();
+    $bid     = business_id();
+    $cat_ids = get_core_category_ids();
+
+    $current_stock = get_core_current_stock($location_id);
+
+    $rows   = [];
+    $cursor = new DateTime($from);
+    $end    = new DateTime($to);
+
+    if (empty($cat_ids)) {
+        while ($cursor <= $end) {
+            $rows[] = ['day' => $cursor->format('Y-m-d'), 'received' => 0, 'sold' => 0, 'net' => 0, 'cumulative' => $current_stock];
+            $cursor->modify('+1 day');
+        }
+        return $rows;
+    }
+
+    $placeholders = [];
+    $params       = [':bid' => $bid, ':from' => $from, ':to' => $to];
+    foreach ($cat_ids as $i => $id) {
+        $key = ':c' . $i;
+        $placeholders[] = $key;
+        $params[$key] = $id;
+    }
+    $in = implode(',', $placeholders);
+
+    $loc_sql = '';
+    if ($location_id) {
+        $loc_sql = ' AND t.location_id = :loc';
+        $params[':loc'] = $location_id;
+    }
+
+    $st = $db->prepare("
+        SELECT DATE(t.transaction_date) AS day, COALESCE(SUM(pl.quantity), 0) AS qty
+        FROM purchase_lines pl
+        JOIN transactions t ON t.id = pl.transaction_id
+            AND t.type = 'purchase' AND t.status = 'received' AND t.business_id = :bid
+            AND DATE(t.transaction_date) BETWEEN :from AND :to {$loc_sql}
+        JOIN products p ON p.id = pl.product_id AND p.category_id IN ($in)
+        GROUP BY day
+    ");
+    $st->execute($params);
+    $recv = array_column($st->fetchAll(), 'qty', 'day');
+
+    $st = $db->prepare("
+        SELECT DATE(t.transaction_date) AS day, COALESCE(SUM(sl.quantity - sl.quantity_returned), 0) AS qty
+        FROM transaction_sell_lines sl
+        JOIN transactions t ON t.id = sl.transaction_id
+            AND t.type = 'sell' AND t.status = 'final' AND t.business_id = :bid
+            AND DATE(t.transaction_date) BETWEEN :from AND :to {$loc_sql}
+        JOIN products p ON p.id = sl.product_id AND p.category_id IN ($in)
+        GROUP BY day
+    ");
+    $st->execute($params);
+    $sold = array_column($st->fetchAll(), 'qty', 'day');
+
+    // Build the raw (zero-based) daily series first...
+    $cursor = new DateTime($from);
+    $rel    = 0;
+    $days   = [];
+    while ($cursor <= $end) {
+        $d     = $cursor->format('Y-m-d');
+        $r     = (float)($recv[$d] ?? 0);
+        $s     = (float)($sold[$d] ?? 0);
+        $net   = $r - $s;
+        $rel  += $net;
+        $days[] = ['day' => $d, 'received' => $r, 'sold' => $s, 'net' => $net, 'relative' => $rel];
+        $cursor->modify('+1 day');
+    }
+
+    // ...then shift every point so the series ends at the real current stock qty.
+    $offset = $current_stock - (end($days)['relative'] ?? 0);
+    foreach ($days as $day) {
+        $rows[] = [
+            'day'        => $day['day'],
+            'received'   => $day['received'],
+            'sold'       => $day['sold'],
+            'net'        => $day['net'],
+            'cumulative' => $day['relative'] + $offset,
+        ];
+    }
+    return $rows;
+}
+
 // ── Daily sales revenue ───────────────────────────────────────────────────────
 
 function get_daily_revenue(string $from, string $to): array
