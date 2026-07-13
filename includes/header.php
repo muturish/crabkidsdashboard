@@ -49,6 +49,12 @@
       Stock Trend
     </a>
 
+    <a href="/cumulative-net-change.php"
+       class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'cumulative-net-change.php' ? 'active' : '' ?>">
+      <span class="ck-nav-icon"><i class="bi bi-graph-up"></i></span>
+      Cumulative Net Change
+    </a>
+
     <a href="/sales-by-size.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'sales-by-size.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-rulers"></i></span>
