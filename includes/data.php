@@ -225,13 +225,23 @@ function get_top_stock_value(int $limit = 10): array
     $st = $db->prepare("
         SELECT p.name AS product,
                SUM(vld.qty_available) AS qty,
-               MAX(pl.purchase_price_inc_tax) AS cost_price,
-               SUM(vld.qty_available * pl.purchase_price_inc_tax) AS stock_value
+               MAX(pl_latest.purchase_price_inc_tax) AS cost_price,
+               SUM(vld.qty_available * pl_latest.purchase_price_inc_tax) AS stock_value
         FROM variation_location_details vld
         JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
-        JOIN purchase_lines pl ON pl.variation_id = vld.variation_id
-        JOIN transactions t ON t.id = pl.transaction_id
-            AND t.type = 'purchase' AND t.status = 'received' AND t.business_id = :bid2
+        JOIN (
+            SELECT pl.variation_id, pl.purchase_price_inc_tax
+            FROM purchase_lines pl
+            JOIN transactions t ON t.id = pl.transaction_id
+                AND t.type = 'purchase' AND t.status = 'received' AND t.business_id = :bid2
+            WHERE pl.id = (
+                SELECT pl2.id FROM purchase_lines pl2
+                JOIN transactions t2 ON t2.id = pl2.transaction_id
+                    AND t2.type = 'purchase' AND t2.status = 'received'
+                WHERE pl2.variation_id = pl.variation_id
+                ORDER BY t2.transaction_date DESC LIMIT 1
+            )
+        ) pl_latest ON pl_latest.variation_id = vld.variation_id
         WHERE vld.qty_available > 0
         GROUP BY p.id
         ORDER BY stock_value DESC
