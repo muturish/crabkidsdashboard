@@ -3,7 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/includes/data.php';
 
 $page_title    = 'Targets Monitoring';
-$page_subtitle = 'Check your next purchase amount against your M-Pesa balance and track the deficit over time';
+$page_subtitle = 'Check your next purchase amount against your live M-Pesa balance and track the deficit over time';
 
 // Handle delete (GET, redirect after)
 if (isset($_GET['delete']) && ctype_digit($_GET['delete'])) {
@@ -13,19 +13,25 @@ if (isset($_GET['delete']) && ctype_digit($_GET['delete'])) {
 }
 
 // Handle save (POST, redirect after to avoid resubmission on refresh)
+// The M-Pesa balance is never trusted from the client -- it's re-read from the
+// mpesa_transactions log at save time, same as the live figure shown on screen.
 $save_error = null;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase_amount'], $_POST['mpesa_balance'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase_amount'])) {
     $purchase_amount = is_numeric($_POST['purchase_amount']) ? (float)$_POST['purchase_amount'] : null;
-    $mpesa_balance   = is_numeric($_POST['mpesa_balance'])   ? (float)$_POST['mpesa_balance']   : null;
     $notes           = trim($_POST['notes'] ?? '') !== '' ? trim($_POST['notes']) : null;
 
-    if ($purchase_amount === null || $mpesa_balance === null || $purchase_amount < 0 || $mpesa_balance < 0) {
-        $save_error = 'Enter valid, non-negative amounts for both fields.';
+    if ($purchase_amount === null || $purchase_amount < 0) {
+        $save_error = 'Enter a valid, non-negative purchase amount.';
     } else {
         try {
-            save_purchase_target($purchase_amount, $mpesa_balance, $notes);
-            header('Location: targets-monitoring.php');
-            exit;
+            $mpesa_now = get_latest_mpesa_balance();
+            if ($mpesa_now === null) {
+                $save_error = 'No M-Pesa balance found yet in mpesa_transactions — cannot save a check.';
+            } else {
+                save_purchase_target($purchase_amount, (float)$mpesa_now['balance'], $notes);
+                header('Location: targets-monitoring.php');
+                exit;
+            }
         } catch (Exception $e) {
             $save_error = $e->getMessage();
         }
@@ -34,20 +40,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purchase_amount'], $_
 
 try {
     $suggested = get_suggested_purchase_amount();
+    $mpesa     = get_latest_mpesa_balance();
     $history   = get_purchase_targets(50);
     $db_error  = null;
 } catch (Exception $e) {
     $db_error  = $e->getMessage();
     $suggested = 0;
+    $mpesa     = null;
     $history   = [];
 }
 
 $latest = $history[0] ?? null;
 
-$j_labels  = json_encode(array_map(fn($r) => date('d M', strtotime($r['created_at'])), array_reverse($history)));
-$j_deficit = json_encode(array_map(fn($r) => round((float)$r['deficit']), array_reverse($history)));
-$j_target  = json_encode(array_map(fn($r) => round((float)$r['purchase_amount']), array_reverse($history)));
-$j_balance = json_encode(array_map(fn($r) => round((float)$r['mpesa_balance']), array_reverse($history)));
+$j_labels        = json_encode(array_map(fn($r) => date('d M', strtotime($r['created_at'])), array_reverse($history)));
+$j_deficit       = json_encode(array_map(fn($r) => round((float)$r['deficit']), array_reverse($history)));
+$j_target        = json_encode(array_map(fn($r) => round((float)$r['purchase_amount']), array_reverse($history)));
+$j_balance       = json_encode(array_map(fn($r) => round((float)$r['mpesa_balance']), array_reverse($history)));
+$j_mpesa_balance = json_encode($mpesa ? (float)$mpesa['balance'] : 0);
 
 $inline_scripts = <<<JS
 (function(){var c=document.getElementById('targetChart');if(!c||!{$j_labels}.length)return;new Chart(c,{type:'line',data:{labels:{$j_labels},datasets:[
@@ -57,18 +66,19 @@ $inline_scripts = <<<JS
 ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'},tooltip:{callbacks:{label:function(c){return c.dataset.label+': KES '+c.parsed.y.toLocaleString();}}}},scales:{x:{grid:{display:false}},y:{ticks:{callback:function(v){return 'KES '+(v/1000).toFixed(0)+'k';}}}}}});})();
 
 (function(){
-  var pa=document.getElementById('inp-purchase-amount'), mb=document.getElementById('inp-mpesa-balance');
+  var pa=document.getElementById('inp-purchase-amount');
   var out=document.getElementById('live-preview');
+  var mpesaBalance={$j_mpesa_balance};
   function fmt(n){return 'KES '+Math.round(n).toLocaleString();}
   function render(){
-    var p=parseFloat(pa.value)||0, m=parseFloat(mb.value)||0;
+    var p=parseFloat(pa.value)||0, m=mpesaBalance;
     var deficit=p-m, pct=p>0?(deficit/p*100):0;
     var ok=deficit<=0;
     out.innerHTML = ok
       ? '<span class="ck-status ok">Fully Funded</span> Surplus of '+fmt(-deficit)+' ('+Math.abs(pct).toFixed(1)+'% above target)'
       : '<span class="ck-status critical">Shortfall</span> Short by '+fmt(deficit)+' ('+pct.toFixed(1)+'% of purchase amount)';
   }
-  if(pa&&mb){pa.addEventListener('input',render);mb.addEventListener('input',render);render();}
+  if(pa){pa.addEventListener('input',render);render();}
 })();
 JS;
 
@@ -96,7 +106,7 @@ require_once __DIR__ . '/includes/header.php';
     <div class="ck-kpi kpi-green">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Latest M-Pesa Balance</p><span class="ck-kpi-icon"><i class="bi bi-phone"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= $latest ? number_format((float)$latest['mpesa_balance']) : '0' ?></div>
-      <div class="ck-kpi-sub">as entered</div>
+      <div class="ck-kpi-sub">at time of that check</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
@@ -125,6 +135,9 @@ require_once __DIR__ . '/includes/header.php';
     <?php if ($save_error): ?>
       <div class="ck-alert err"><i class="bi bi-x-circle-fill"></i><div><?= htmlspecialchars($save_error) ?></div></div>
     <?php endif; ?>
+    <?php if (!$mpesa): ?>
+      <div class="ck-alert warn"><i class="bi bi-exclamation-triangle-fill"></i><div>No M-Pesa transactions found yet in <code>mpesa_transactions</code> — balance will show as KES 0 until the first payment comes in.</div></div>
+    <?php endif; ?>
     <form method="POST" action="">
       <div class="row g-3 align-items-end">
         <div class="col-6 col-md-3">
@@ -132,8 +145,9 @@ require_once __DIR__ . '/includes/header.php';
           <input type="number" id="inp-purchase-amount" name="purchase_amount" class="form-control form-control-sm" min="0" step="100" value="<?= (int)$suggested ?>">
         </div>
         <div class="col-6 col-md-3">
-          <label class="form-label ck-kpi-label">M-Pesa Balance (KES)</label>
-          <input type="number" id="inp-mpesa-balance" name="mpesa_balance" class="form-control form-control-sm" min="0" step="100" value="0">
+          <label class="form-label ck-kpi-label">M-Pesa Balance (live)</label>
+          <div class="form-control form-control-sm bg-light fw-bold" style="color:#059669;">KES <?= $mpesa ? number_format((float)$mpesa['balance']) : '0' ?></div>
+          <small class="text-muted"><?= $mpesa ? 'as of ' . date('d M Y, H:i', strtotime($mpesa['created_at'])) : 'no data yet' ?></small>
         </div>
         <div class="col-12 col-md-4">
           <label class="form-label ck-kpi-label">Notes (optional)</label>

@@ -667,3 +667,20 @@ function get_suggested_purchase_amount(): float
     $rows = get_restock_requirements(4);
     return array_sum(array_column($rows, 'restock_cost'));
 }
+
+// ── Latest M-Pesa balance (from the Daraja callback log, not business-scoped) ──
+
+function get_latest_mpesa_balance(): ?array
+{
+    $db = get_db();
+
+    $st = $db->query("
+        SELECT org_account_balance AS balance, created_at
+        FROM mpesa_transactions
+        WHERE org_account_balance IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+    ");
+    $row = $st->fetch();
+    return $row ?: null;
+}
