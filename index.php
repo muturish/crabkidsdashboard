@@ -14,6 +14,7 @@ try {
     $movement   = get_daily_stock_movement($from, $to);
     $revenue    = get_daily_revenue($from, $to);
     $categories = get_stock_by_category();
+    $subcats    = get_stock_by_subcategory();
     $top_value  = get_top_stock_value(10);
     $low_stock  = get_low_stock_items();
     $monthly    = get_monthly_summary(6);
@@ -21,7 +22,7 @@ try {
 } catch (Exception $e) {
     $db_error = $e->getMessage();
     $kpis = ['total_products'=>0,'total_units'=>0,'stock_cost_value'=>0,'stock_sell_value'=>0,'low_stock'=>0,'out_of_stock'=>0,'today_sales'=>0];
-    $movement = $revenue = $categories = $top_value = $low_stock = $monthly = [];
+    $movement = $revenue = $categories = $subcats = $top_value = $low_stock = $monthly = [];
 }
 
 $total_recv = array_sum(array_column($movement, 'received'));
@@ -243,6 +244,71 @@ require_once __DIR__ . '/includes/header.php';
           <div class="ck-chart" style="height:275px;"><canvas id="catChart"></canvas></div>
         <?php endif; ?>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Units in stock: category & size -->
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center justify-content-between gap-2">
+        <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-tags-fill"></i></span>Units in Stock by Category</h6>
+        <small class="text-muted">Boys · Girls · Unisex &amp; others</small>
+      </div>
+      <?php if (empty($categories)): ?>
+        <div class="card-body"><div class="ck-empty"><div class="ck-empty-icon"><i class="bi bi-inbox"></i></div><p class="mb-0 fw-semibold">No data</p></div></div>
+      <?php else: $mxc = max(array_column($categories, 'total_qty')) ?: 1; ?>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr><th style="width:40px;text-align:center;">#</th><th>Category</th><th class="text-end">Units</th><th style="width:120px;">Share</th></tr></thead>
+            <tbody>
+            <?php foreach ($categories as $i => $r):
+              $pct = round((float)$r['total_qty'] / $mxc * 100);
+              $rc  = $i===0?'r1':($i===1?'r2':($i===2?'r3':''));
+            ?>
+              <tr>
+                <td style="text-align:center;"><span class="ck-rank <?= $rc ?>"><?= $i+1 ?></span></td>
+                <td class="fw-semibold"><?= htmlspecialchars($r['category']) ?></td>
+                <td class="text-end fw-bold" style="color:#1d4ed8"><?= number_format((float)$r['total_qty']) ?></td>
+                <td><div class="ck-prog"><div class="ck-prog-track"><div class="ck-prog-fill" style="width:<?= $pct ?>%"></div></div><span class="ck-prog-pct"><?= $pct ?>%</span></div></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center justify-content-between gap-2">
+        <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-rulers"></i></span>Units in Stock by Size</h6>
+        <small class="text-muted">25-30 · 31-36 · 37-42</small>
+      </div>
+      <?php if (empty($subcats)): ?>
+        <div class="card-body"><div class="ck-empty"><div class="ck-empty-icon"><i class="bi bi-inbox"></i></div><p class="mb-0 fw-semibold">No data</p></div></div>
+      <?php else: $mxs = max(array_column($subcats, 'total_qty')) ?: 1; ?>
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr><th style="width:40px;text-align:center;">#</th><th>Size</th><th class="text-end">Units</th><th style="width:120px;">Share</th></tr></thead>
+            <tbody>
+            <?php foreach ($subcats as $i => $r):
+              $pct = round((float)$r['total_qty'] / $mxs * 100);
+              $rc  = $i===0?'r1':($i===1?'r2':($i===2?'r3':''));
+            ?>
+              <tr>
+                <td style="text-align:center;"><span class="ck-rank <?= $rc ?>"><?= $i+1 ?></span></td>
+                <td class="fw-semibold"><?= htmlspecialchars($r['sub_category']) ?></td>
+                <td class="text-end fw-bold" style="color:#f97316"><?= number_format((float)$r['total_qty']) ?></td>
+                <td><div class="ck-prog"><div class="ck-prog-track"><div class="ck-prog-fill or" style="width:<?= $pct ?>%"></div></div><span class="ck-prog-pct"><?= $pct ?>%</span></div></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 </div>

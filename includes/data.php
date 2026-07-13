@@ -192,6 +192,29 @@ function get_stock_by_category(): array
     return $st->fetchAll();
 }
 
+// ── Stock by sub-category (size) ────────────────────────────────────────────────
+// Aggregated by name across all parent categories, e.g. "Size 25-30" sums
+// For Boys + For Girls + Unisex + Sneakers + CrabKids Sport, etc.
+
+function get_stock_by_subcategory(): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $st = $db->prepare("
+        SELECT sc.name AS sub_category,
+               SUM(vld.qty_available) AS total_qty
+        FROM variation_location_details vld
+        JOIN products p ON p.id = vld.product_id AND p.business_id = :bid AND p.is_inactive = 0
+        JOIN categories sc ON sc.id = p.sub_category_id
+        WHERE vld.qty_available > 0
+        GROUP BY sc.name
+        ORDER BY total_qty DESC
+    ");
+    $st->execute([':bid' => $bid]);
+    return $st->fetchAll();
+}
+
 // ── Top products by stock value ───────────────────────────────────────────────
 
 function get_top_stock_value(int $limit = 10): array
