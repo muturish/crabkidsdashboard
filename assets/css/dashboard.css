@@ -501,6 +501,7 @@ body {
 .ck-ci-green  { background: #ecfdf5; color: #059669; }
 .ck-ci-amber  { background: #fffbeb; color: #d97706; }
 .ck-ci-slate  { background: #f1f5f9; color: #475569; }
+.ck-ci-pink   { background: #fdf2f8; color: #db2777; }
 
 /* ── 19. SMALL TWEAKS TO BOOTSTRAP LOOK (additive only) ─────── */
 /* These selectors don't conflict — they just add polish */
