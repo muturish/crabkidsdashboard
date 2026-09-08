@@ -26,6 +26,7 @@
   <div class="ms-auto d-flex align-items-center gap-3">
     <span class="ck-topbar-date d-none d-md-inline"><?= date('D, d M Y') ?></span>
     <span class="ck-live"><span class="ck-live-dot"></span>Live</span>
+    <a href="/logout.php" class="text-white-50 text-decoration-none" title="Log out" style="font-size:1.1rem;"><i class="bi bi-box-arrow-right"></i></a>
   </div>
 </header>
 
