@@ -982,3 +982,39 @@ function get_sales_transactions(string $from, string $to, ?string $method = null
     $st->execute();
     return $st->fetchAll();
 }
+
+// Aggregate totals for the whole filtered range (not capped like the row
+// list above), so the KPI cards stay correct even when there are more than
+// $limit payments in range. M-Pesa is identified by a matched receipt, same
+// evidence-based rule as the row list -- not by assuming which custom_pay_N
+// is M-Pesa.
+function get_sales_payment_summary(string $from, string $to, ?string $method = null, ?string $prepaid_key = null): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $method_sql = $method ? ' AND tp.method = :method' : '';
+
+    $st = $db->prepare("
+        SELECT
+            COALESCE(SUM(tp.amount), 0) AS total_amount,
+            COALESCE(SUM(CASE WHEN tp.method = 'cash' THEN tp.amount ELSE 0 END), 0) AS cash_amount,
+            COALESCE(SUM(CASE WHEN mt.receipt_number IS NOT NULL THEN tp.amount ELSE 0 END), 0) AS mpesa_amount,
+            COALESCE(SUM(CASE WHEN tp.method = :prepaid_key THEN tp.amount ELSE 0 END), 0) AS prepaid_amount,
+            COUNT(*) AS payment_count,
+            SUM(CASE WHEN mt.receipt_number IS NOT NULL THEN 1 ELSE 0 END) AS mpesa_count
+        FROM transaction_payments tp
+        JOIN transactions t ON t.id = tp.transaction_id
+            AND t.business_id = :bid AND t.type = 'sell' AND t.status = 'final'
+            AND DATE(t.transaction_date) BETWEEN :from AND :to
+        LEFT JOIN mpesa_transactions mt ON mt.receipt_number = tp.transaction_no
+        WHERE tp.is_return = 0 {$method_sql}
+    ");
+    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    $st->bindValue(':from', $from);
+    $st->bindValue(':to', $to);
+    $st->bindValue(':prepaid_key', $prepaid_key ?? '__none__');
+    if ($method) $st->bindValue(':method', $method);
+    $st->execute();
+    return $st->fetch();
+}

@@ -12,17 +12,17 @@ if ($from > $to) [$from, $to] = [$to, $from];
 $method = isset($_GET['method']) && $_GET['method'] !== '' ? $_GET['method'] : null;
 
 try {
-    $labels = get_payment_method_labels();
-    $rows   = get_sales_transactions($from, $to, $method, 500);
-    $db_error = null;
+    $labels      = get_payment_method_labels();
+    $prepaid_key = array_search('Prepaid', $labels, true) ?: null;
+    $summary     = get_sales_payment_summary($from, $to, $method, $prepaid_key);
+    $rows        = get_sales_transactions($from, $to, $method, 500);
+    $db_error    = null;
 } catch (Exception $e) {
     $db_error = $e->getMessage();
-    $labels = [];
-    $rows   = [];
+    $labels   = [];
+    $summary  = ['total_amount' => 0, 'cash_amount' => 0, 'mpesa_amount' => 0, 'prepaid_amount' => 0, 'payment_count' => 0, 'mpesa_count' => 0];
+    $rows     = [];
 }
-
-$total_amount = array_sum(array_column($rows, 'amount'));
-$mpesa_count  = count(array_filter($rows, fn($r) => !empty($r['mpesa_date'])));
 
 // Method options actually used in the DB's own configured labels, for the filter dropdown.
 $method_options = $labels;
@@ -42,10 +42,38 @@ require_once __DIR__ . '/includes/header.php';
   <div><h1 class="ck-page-title"><?= htmlspecialchars($page_title) ?></h1><p class="ck-page-sub mb-0"><?= htmlspecialchars($page_subtitle) ?></p></div>
 </div>
 
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi kpi-blue">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Total Amount</p><span class="ck-kpi-icon"><i class="bi bi-cash-stack"></i></span></div>
+      <div class="ck-kpi-val sm">KES <?= number_format($summary['total_amount']) ?></div>
+      <div class="ck-kpi-sub"><?= number_format($summary['payment_count']) ?> payments</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi kpi-green">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Total M-Pesa</p><span class="ck-kpi-icon"><i class="bi bi-phone"></i></span></div>
+      <div class="ck-kpi-val sm">KES <?= number_format($summary['mpesa_amount']) ?></div>
+      <div class="ck-kpi-sub"><?= number_format($summary['mpesa_count']) ?> matched</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi kpi-slate">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Total Cash</p><span class="ck-kpi-icon"><i class="bi bi-cash"></i></span></div>
+      <div class="ck-kpi-val sm">KES <?= number_format($summary['cash_amount']) ?></div>
+      <div class="ck-kpi-sub">&nbsp;</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi kpi-amber">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Total Prepaid</p><span class="ck-kpi-icon"><i class="bi bi-wallet2"></i></span></div>
+      <div class="ck-kpi-val sm">KES <?= number_format($summary['prepaid_amount']) ?></div>
+      <div class="ck-kpi-sub">&nbsp;</div>
+    </div>
+  </div>
+</div>
+
 <div class="ck-pills mb-3">
-  <span class="ck-pill"><i class="bi bi-receipt" style="color:#1d4ed8"></i> Payments: <strong><?= number_format(count($rows)) ?></strong></span>
-  <span class="ck-pill"><i class="bi bi-cash-stack" style="color:#f97316"></i> Total: <strong>KES <?= number_format($total_amount) ?></strong></span>
-  <span class="ck-pill"><i class="bi bi-phone" style="color:#059669"></i> M-Pesa Matched: <strong><?= number_format($mpesa_count) ?></strong></span>
   <span class="ck-pill"><i class="bi bi-calendar-range text-muted"></i> <?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></span>
 </div>
 
@@ -73,7 +101,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="card">
   <div class="card-header d-flex align-items-center justify-content-between gap-2">
     <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-list-ol"></i></span>Sales Payments</h6>
-    <small class="text-muted">Most recent 500</small>
+    <small class="text-muted"><?= $summary['payment_count'] > count($rows) ? 'Showing most recent ' . number_format(count($rows)) . ' of ' . number_format($summary['payment_count']) : 'Most recent 500' ?></small>
   </div>
   <?php if (empty($rows)): ?>
     <div class="card-body"><div class="ck-empty"><div class="ck-empty-icon"><i class="bi bi-inbox"></i></div><p class="mb-0 fw-semibold">No transactions in this range</p></div></div>
