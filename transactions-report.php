@@ -44,31 +44,31 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="row g-3 mb-3">
   <div class="col-6 col-md-3">
-    <div class="ck-kpi kpi-blue">
+    <div class="ck-kpi ck-kpi-compact kpi-blue">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Total Amount</p><span class="ck-kpi-icon"><i class="bi bi-cash-stack"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= number_format($summary['total_amount']) ?></div>
       <div class="ck-kpi-sub"><?= number_format($summary['payment_count']) ?> payments</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="ck-kpi kpi-green">
+    <div class="ck-kpi ck-kpi-compact kpi-green">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Total M-Pesa</p><span class="ck-kpi-icon"><i class="bi bi-phone"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= number_format($summary['mpesa_amount']) ?></div>
       <div class="ck-kpi-sub"><?= number_format($summary['mpesa_count']) ?> matched</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="ck-kpi kpi-slate">
+    <div class="ck-kpi ck-kpi-compact kpi-slate">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Total Cash</p><span class="ck-kpi-icon"><i class="bi bi-cash"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= number_format($summary['cash_amount']) ?></div>
-      <div class="ck-kpi-sub">&nbsp;</div>
+      <div class="ck-kpi-sub"></div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="ck-kpi kpi-amber">
+    <div class="ck-kpi ck-kpi-compact kpi-amber">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Total Prepaid</p><span class="ck-kpi-icon"><i class="bi bi-wallet2"></i></span></div>
       <div class="ck-kpi-val sm">KES <?= number_format($summary['prepaid_amount']) ?></div>
-      <div class="ck-kpi-sub">&nbsp;</div>
+      <div class="ck-kpi-sub"></div>
     </div>
   </div>
 </div>

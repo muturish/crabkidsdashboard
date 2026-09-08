@@ -549,3 +549,13 @@ body {
   body { background: #fff !important; }
   .card { box-shadow: none !important; break-inside: avoid; }
 }
+
+/* ── 22. COMPACT KPI CARD (additive) ───────────────────────────
+   Smaller variant of .ck-kpi for pages that want a denser summary
+   row (e.g. Transactions). Add alongside .ck-kpi, doesn't change it. */
+.ck-kpi.ck-kpi-compact { padding: 0.65rem 0.85rem; }
+.ck-kpi.ck-kpi-compact .ck-kpi-head { margin-bottom: 0.3rem; }
+.ck-kpi.ck-kpi-compact .ck-kpi-icon { width: 26px; height: 26px; font-size: 0.75rem; border-radius: 6px; }
+.ck-kpi.ck-kpi-compact .ck-kpi-val { font-size: 1.2rem; }
+.ck-kpi.ck-kpi-compact .ck-kpi-val.sm { font-size: 0.95rem; }
+.ck-kpi.ck-kpi-compact .ck-kpi-sub:empty { display: none; }
