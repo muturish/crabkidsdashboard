@@ -518,16 +518,16 @@ function get_daily_sold_by_size(string $from, string $to): array
 
     $st = $db->prepare("
         SELECT DATE(t.transaction_date) AS day,
-               pv.name AS size_name,
+               v.name AS size_name,
                COALESCE(SUM(sl.quantity - sl.quantity_returned), 0) AS qty_sold
         FROM transaction_sell_lines sl
         JOIN transactions t ON t.id = sl.transaction_id
             AND t.type = 'sell' AND t.status = 'final'
             AND t.business_id = :bid
             AND DATE(t.transaction_date) BETWEEN :from AND :to
-        JOIN product_variations pv ON pv.id = sl.variation_id
-        GROUP BY day, pv.name
-        ORDER BY day, pv.name
+        JOIN variations v ON v.id = sl.variation_id
+        GROUP BY day, v.name
+        ORDER BY day, v.name
     ");
     $st->execute([':bid' => $bid, ':from' => $from, ':to' => $to]);
     $raw = $st->fetchAll();
@@ -570,8 +570,8 @@ function get_daily_sold_by_category(string $from, string $to): array
             AND t.type = 'sell' AND t.status = 'final'
             AND t.business_id = :bid
             AND DATE(t.transaction_date) BETWEEN :from AND :to
-        JOIN product_variations pv ON pv.id = sl.variation_id
-        JOIN products p ON p.id = pv.product_id AND p.business_id = :bid2 AND p.is_inactive = 0
+        JOIN variations v ON v.id = sl.variation_id
+        JOIN products p ON p.id = v.product_id AND p.business_id = :bid2 AND p.is_inactive = 0
         LEFT JOIN categories c ON c.id = p.category_id
         GROUP BY day, category
         ORDER BY day, category

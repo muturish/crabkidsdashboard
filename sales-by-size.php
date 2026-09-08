@@ -42,6 +42,14 @@ foreach($cg as $i=>$cat){
 
 $total_sold=array_sum(array_map(fn($d)=>array_sum($d),$sp));
 
+$size_totals=[];foreach($sg as $sz){$t=0;foreach($sp as $d){$t+=$d[$sz]??0;}$size_totals[$sz]=$t;}arsort($size_totals);
+$top_size = $size_totals ? array_key_first($size_totals) : null;
+$top_size_qty = $top_size !== null ? $size_totals[$top_size] : 0;
+
+$cat_totals=[];foreach($cg as $cat){$t=0;foreach($cp as $d){$t+=$d[$cat]??0;}$cat_totals[$cat]=$t;}arsort($cat_totals);
+$top_cat = $cat_totals ? array_key_first($cat_totals) : null;
+$top_cat_qty = $top_cat !== null ? $cat_totals[$top_cat] : 0;
+
 $j_sl=json_encode($sl); $j_sd=json_encode($sd); $j_cl=json_encode($cl); $j_cd=json_encode($cd);
 
 $inline_scripts = <<<JS
@@ -64,11 +72,35 @@ require_once __DIR__ . '/includes/header.php';
   <div><h1 class="ck-page-title"><?= htmlspecialchars($page_title) ?></h1><p class="ck-page-sub mb-0"><?= htmlspecialchars($page_subtitle) ?></p></div>
 </div>
 
-<div class="ck-pills mb-4">
-  <span class="ck-pill"><i class="bi bi-bag-check" style="color:#1d4ed8"></i> Total Sold: <strong><?= number_format($total_sold) ?> units</strong></span>
-  <span class="ck-pill"><i class="bi bi-rulers" style="color:#1d4ed8"></i> Sizes: <strong><?= count($sg) ?></strong></span>
-  <span class="ck-pill"><i class="bi bi-tag" style="color:#f97316"></i> Categories: <strong><?= count($cg) ?></strong></span>
-  <span class="ck-pill"><i class="bi bi-calendar-range text-muted"></i> <?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></span>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi ck-kpi-compact kpi-blue">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Total Units Sold</p><span class="ck-kpi-icon"><i class="bi bi-bag-check"></i></span></div>
+      <div class="ck-kpi-val sm"><?= number_format($total_sold) ?></div>
+      <div class="ck-kpi-sub"><?= count($sg) ?> sizes · <?= count($cg) ?> categories</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi ck-kpi-compact kpi-slate">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Top Size</p><span class="ck-kpi-icon"><i class="bi bi-rulers"></i></span></div>
+      <div class="ck-kpi-val sm"><?= $top_size !== null ? htmlspecialchars($top_size) : '—' ?></div>
+      <div class="ck-kpi-sub"><?= $top_size !== null ? number_format($top_size_qty).' units' : 'No data' ?></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi ck-kpi-compact kpi-amber">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Top Category</p><span class="ck-kpi-icon"><i class="bi bi-tag"></i></span></div>
+      <div class="ck-kpi-val sm"><?= $top_cat !== null ? htmlspecialchars($top_cat) : '—' ?></div>
+      <div class="ck-kpi-sub"><?= $top_cat !== null ? number_format($top_cat_qty).' units' : 'No data' ?></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="ck-kpi ck-kpi-compact kpi-green">
+      <div class="ck-kpi-head"><p class="ck-kpi-label">Date Range</p><span class="ck-kpi-icon"><i class="bi bi-calendar-range"></i></span></div>
+      <div class="ck-kpi-val sm"><?= count($sl) ?> days</div>
+      <div class="ck-kpi-sub"><?= date('d M', strtotime($from)) ?> – <?= date('d M Y', strtotime($to)) ?></div>
+    </div>
+  </div>
 </div>
 
 <form id="filterForm" method="GET" action="" class="ck-filter">
