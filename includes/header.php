@@ -79,6 +79,12 @@
       Importation Assistant
     </a>
 
+    <a href="/transactions-report.php"
+       class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'transactions-report.php' ? 'active' : '' ?>">
+      <span class="ck-nav-icon"><i class="bi bi-receipt"></i></span>
+      Transactions
+    </a>
+
     <a href="/low-stock.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'low-stock.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-exclamation-triangle"></i></span>

@@ -904,3 +904,81 @@ function get_latest_mpesa_balance(): ?array
     $row = $st->fetch();
     return $row ?: null;
 }
+
+// ── Transactions report (sales, payment method, M-Pesa reconciliation) ────────
+
+// Reads the business's own configured payment method labels (e.g. custom_pay_1
+// renamed to "Mpesa Online") so the report always matches what's on the POS.
+function get_payment_method_labels(): array
+{
+    $defaults = [
+        'cash'          => 'Cash',
+        'card'          => 'Card',
+        'cheque'        => 'Cheque',
+        'bank_transfer' => 'Bank Transfer',
+        'other'         => 'Other',
+        'custom_pay_1'  => 'Custom Payment 1',
+        'custom_pay_2'  => 'Custom Payment 2',
+        'custom_pay_3'  => 'Custom Payment 3',
+        'custom_pay_4'  => 'Custom Payment 4',
+        'custom_pay_5'  => 'Custom Payment 5',
+        'custom_pay_6'  => 'Custom Payment 6',
+        'custom_pay_7'  => 'Custom Payment 7',
+    ];
+
+    $db  = get_db();
+    $bid = business_id();
+    $st  = $db->prepare("SELECT common_settings FROM business WHERE id = :bid");
+    $st->execute([':bid' => $bid]);
+    $json = $st->fetchColumn();
+
+    if ($json) {
+        $settings = json_decode($json, true);
+        if (!empty($settings['payments']) && is_array($settings['payments'])) {
+            foreach ($settings['payments'] as $key => $label) {
+                if (!empty($label)) $defaults[$key] = $label;
+            }
+        }
+    }
+    return $defaults;
+}
+
+// One row per payment (not per sale), so split payments show each method and,
+// for any leg that matches an M-Pesa receipt, that payment's real M-Pesa date.
+function get_sales_transactions(string $from, string $to, ?string $method = null, int $limit = 500): array
+{
+    $db  = get_db();
+    $bid = business_id();
+
+    $method_sql = $method ? ' AND tp.method = :method' : '';
+
+    $st = $db->prepare("
+        SELECT t.invoice_no,
+               t.transaction_date AS sale_date,
+               t.final_total      AS sale_total,
+               c.name             AS customer,
+               tp.method,
+               tp.amount,
+               tp.transaction_no,
+               tp.payment_ref_no,
+               mt.created_at      AS mpesa_date,
+               mt.mpesa_number,
+               mt.first_name      AS mpesa_payer
+        FROM transaction_payments tp
+        JOIN transactions t ON t.id = tp.transaction_id
+            AND t.business_id = :bid AND t.type = 'sell' AND t.status = 'final'
+            AND DATE(t.transaction_date) BETWEEN :from AND :to
+        LEFT JOIN contacts c ON c.id = t.contact_id
+        LEFT JOIN mpesa_transactions mt ON mt.receipt_number = tp.transaction_no
+        WHERE tp.is_return = 0 {$method_sql}
+        ORDER BY t.transaction_date DESC, t.id DESC
+        LIMIT :lim
+    ");
+    $st->bindValue(':bid', $bid, PDO::PARAM_INT);
+    $st->bindValue(':from', $from);
+    $st->bindValue(':to', $to);
+    if ($method) $st->bindValue(':method', $method);
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
+}
