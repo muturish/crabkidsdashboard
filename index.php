@@ -108,7 +108,7 @@ require_once __DIR__ . '/includes/header.php';
     <div class="ck-kpi kpi-red">
       <div class="ck-kpi-head"><p class="ck-kpi-label">Alerts</p><span class="ck-kpi-icon"><i class="bi bi-exclamation-triangle"></i></span></div>
       <div class="ck-kpi-val"><?= $kpis['low_stock'] ?><small class="text-muted fw-normal ms-1" style="font-size:.75rem;">low</small></div>
-      <div class="ck-kpi-sub"><?= $kpis['out_of_stock'] ?> out &nbsp;<a href="/low-stock.php" class="text-danger text-decoration-none fw-semibold">View →</a></div>
+      <div class="ck-kpi-sub"><?= $kpis['out_of_stock'] ?> out &nbsp;<a href="low-stock.php" class="text-danger text-decoration-none fw-semibold">View →</a></div>
     </div>
   </div>
 </div>
@@ -119,7 +119,7 @@ require_once __DIR__ . '/includes/header.php';
   <div class="ck-pills">
     <span class="ck-pill"><i class="bi bi-arrow-down-circle" style="color:#1d4ed8"></i> Recv: <strong><?= number_format($total_recv) ?></strong></span>
     <span class="ck-pill"><i class="bi bi-arrow-up-circle" style="color:#f97316"></i> Sold: <strong><?= number_format($total_sold) ?></strong></span>
-    <a href="/cumulative-net-change.php" class="btn btn-ck-ghost btn-sm"><i class="bi bi-graph-up me-1"></i>Cumulative Net Change →</a>
+    <a href="cumulative-net-change.php" class="btn btn-ck-ghost btn-sm"><i class="bi bi-graph-up me-1"></i>Cumulative Net Change →</a>
   </div>
 </div>
 
@@ -303,7 +303,7 @@ require_once __DIR__ . '/includes/header.php';
 <?php if (!empty($low_stock)): ?>
 <div class="d-flex align-items-center justify-content-between mb-3 mt-2">
   <span class="ck-label">Low Stock Alerts</span>
-  <a href="/low-stock.php" class="btn btn-ck-ghost btn-sm"><i class="bi bi-arrow-right me-1"></i>View all</a>
+  <a href="low-stock.php" class="btn btn-ck-ghost btn-sm"><i class="bi bi-arrow-right me-1"></i>View all</a>
 </div>
 <div class="card mb-3">
   <div class="card-header d-flex align-items-center justify-content-between gap-2">

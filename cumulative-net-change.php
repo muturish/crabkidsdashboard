@@ -45,7 +45,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <nav aria-label="breadcrumb" class="mb-2">
   <ol class="breadcrumb mb-0" style="font-size:0.8rem;">
-    <li class="breadcrumb-item"><a href="/index.php" class="text-decoration-none">Home</a></li>
+    <li class="breadcrumb-item"><a href="index.php" class="text-decoration-none">Home</a></li>
     <li class="breadcrumb-item active" aria-current="page">Cumulative Net Change</li>
   </ol>
 </nav>

@@ -62,7 +62,7 @@ require_once __DIR__ . '/includes/header.php';
 <!-- Breadcrumb -->
 <nav aria-label="breadcrumb" class="mb-2">
   <ol class="breadcrumb mb-0" style="font-size:0.8rem;">
-    <li class="breadcrumb-item"><a href="/index.php" class="text-decoration-none">Home</a></li>
+    <li class="breadcrumb-item"><a href="index.php" class="text-decoration-none">Home</a></li>
     <li class="breadcrumb-item active" aria-current="page">Projected Income Growth</li>
   </ol>
 </nav>
@@ -335,6 +335,6 @@ require_once __DIR__ . '/includes/header.php';
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="/assets/js/projected-income.js" defer></script>
+<script src="assets/js/projected-income.js" defer></script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -9,15 +9,15 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/assets/css/dashboard.css">
+  <link rel="stylesheet" href="assets/css/dashboard.css">
 </head>
 <body>
 
 <!-- TOPBAR -->
 <header class="ck-topbar">
   <button class="ck-burger" id="sidebarBtn"><i class="bi bi-list"></i></button>
-  <a href="/index.php" class="text-decoration-none d-flex align-items-center gap-2">
-    <img src="/assets/images/logo.svg" alt="CrabKids logo" class="ck-topbar-logo">
+  <a href="index.php" class="text-decoration-none d-flex align-items-center gap-2">
+    <img src="assets/images/logo.svg" alt="CrabKids logo" class="ck-topbar-logo">
     <div>
       <div class="ck-topbar-name">CrabKids Kenya</div>
       <div class="ck-topbar-sub">Stock Dashboard</div>
@@ -26,7 +26,7 @@
   <div class="ms-auto d-flex align-items-center gap-3">
     <span class="ck-topbar-date d-none d-md-inline"><?= date('D, d M Y') ?></span>
     <span class="ck-live"><span class="ck-live-dot"></span>Live</span>
-    <a href="/logout.php" class="text-white-50 text-decoration-none" title="Log out" style="font-size:1.1rem;"><i class="bi bi-box-arrow-right"></i></a>
+    <a href="logout.php" class="text-white-50 text-decoration-none" title="Log out" style="font-size:1.1rem;"><i class="bi bi-box-arrow-right"></i></a>
   </div>
 </header>
 
@@ -38,55 +38,55 @@
   <div class="ck-nav-group">
     <div class="ck-nav-label">Main</div>
 
-    <a href="/index.php"
+    <a href="index.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-speedometer2"></i></span>
       Overview
     </a>
 
-    <a href="/cumulative-net-change.php"
+    <a href="cumulative-net-change.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'cumulative-net-change.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-graph-up"></i></span>
       Cumulative Net Change
     </a>
 
-    <a href="/sales-by-size.php"
+    <a href="sales-by-size.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'sales-by-size.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-rulers"></i></span>
       Sales by Size
     </a>
 
-    <a href="/best-sellers.php"
+    <a href="best-sellers.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'best-sellers.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-trophy"></i></span>
       Best Sellers
     </a>
 
-    <a href="/projected-income.php"
+    <a href="projected-income.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'projected-income.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-graph-up-arrow"></i></span>
       Projected Income
     </a>
 
-    <a href="/targets-monitoring.php"
+    <a href="targets-monitoring.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'targets-monitoring.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-bullseye"></i></span>
       Targets Monitoring
     </a>
 
-    <a href="/importation-assistant.php"
+    <a href="importation-assistant.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'importation-assistant.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-box-seam"></i></span>
       Importation Assistant
     </a>
 
-    <a href="/transactions-report.php"
+    <a href="transactions-report.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'transactions-report.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-receipt"></i></span>
       Transactions
     </a>
 
-    <a href="/low-stock.php"
+    <a href="low-stock.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'low-stock.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-exclamation-triangle"></i></span>
       Low Stock
