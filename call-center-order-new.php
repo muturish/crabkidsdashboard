@@ -437,69 +437,6 @@ $inline_scripts = <<<'JS'
     mpesaModalDebounce = setTimeout(function(){ loadMpesaModal(q); }, 250);
   });
 
-  // ── STK push: ask the POS to send an M-Pesa prompt for the order total to the
-  // customer's phone, then poll until its callback marks it paid or failed.
-  var stkBtn       = document.getElementById('stk-btn');
-  var stkStatus    = document.getElementById('stk-status');
-  var stkPoll      = null;
-  var stkBtnLabel  = stkBtn.innerHTML;
-
-  function stkShow(kind, html){
-    stkStatus.hidden = false;
-    stkStatus.className = 'cc-stk-status cc-stk-' + kind;
-    stkStatus.innerHTML = html;
-  }
-  function stkStop(){
-    if (stkPoll) { clearInterval(stkPoll); stkPoll = null; }
-    stkBtn.disabled = false;
-    stkBtn.innerHTML = stkBtnLabel;
-  }
-
-  stkBtn.addEventListener('click', function(){
-    var phone = document.querySelector('[name=customer_phone]').value.trim();
-    if (cart.length === 0) { alert('Add the items first -- the prompt is sent for the order total.'); return; }
-    if (!phone) { alert('Enter the customer\'s phone number first.'); document.querySelector('[name=customer_phone]').focus(); return; }
-    if (orderTotal < 1 || orderTotal !== Math.round(orderTotal)) { alert('The order total must be a whole number of shillings to send an M-Pesa prompt.'); return; }
-    if (!confirm('Send an M-Pesa prompt for ' + fmt(orderTotal) + ' to ' + phone + '?')) return;
-
-    stkStop();
-    mpesaSearch.value = '';
-    clearMpesaMatch();
-    stkBtn.disabled = true;
-    stkBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
-    stkShow('wait', 'Sending prompt…');
-
-    var amount = orderTotal;
-    fetch('api/mpesa-stk.php', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({phone: phone, amount: amount})})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (!d.ok) { stkStop(); stkShow('fail', '<i class="bi bi-x-circle me-1"></i>' + escapeHtml(d.error || 'Prompt not sent.')); return; }
-        stkBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Waiting for PIN…';
-        stkShow('wait', '<i class="bi bi-phone me-1"></i>Prompt for ' + fmt(amount) + ' sent to ' + escapeHtml(phone) + '. Ask the customer to enter their M-Pesa PIN…');
-        var tries = 0;
-        stkPoll = setInterval(function(){
-          tries++;
-          fetch('api/mpesa-stk-status.php?id=' + encodeURIComponent(d.checkout_request_id))
-            .then(function(r){ return r.json(); })
-            .then(function(s){
-              if (!s.ok) return;
-              if (s.status === 'success') {
-                stkStop();
-                selectMpesaTransaction({receipt_number: s.receipt_number, first_name: s.first_name, amount: s.amount});
-                stkShow('ok', '<i class="bi bi-check-circle me-1"></i>Paid -- ' + escapeHtml(s.receipt_number) + ' &middot; ' + fmt(s.amount));
-              } else if (s.status === 'failed') {
-                stkStop();
-                stkShow('fail', '<i class="bi bi-x-circle me-1"></i>Payment not completed' + (s.result_desc ? ': ' + escapeHtml(String(s.result_desc).replace(/\.+$/, '')) : '') + '. You can send it again.');
-              } else if (tries >= 40) { // ~2 minutes
-                stkStop();
-                stkShow('fail', '<i class="bi bi-clock me-1"></i>No confirmation yet. If the customer paid, find it with the search below; otherwise send the prompt again.');
-              }
-            });
-        }, 3000);
-      })
-      .catch(function(){ stkStop(); stkShow('fail', '<i class="bi bi-x-circle me-1"></i>Could not send the prompt. Check the connection and try again.'); });
-  });
-
   function syncPaymentMethod(){
     if (paymentStatusSelect.value === 'paid') {
       paymentMethodWrap.hidden = false;
@@ -509,8 +446,6 @@ $inline_scripts = <<<'JS'
       paymentMethodWrap.hidden = true;
       paymentMethodSelect.required = false;
       paymentMethodSelect.value = '';
-      stkStop();
-      stkStatus.hidden = true;
       mpesaSearch.value = '';
       clearMpesaMatch();
     }
@@ -651,9 +586,6 @@ require_once __DIR__ . '/includes/header.php';
 
               <label class="form-label ck-kpi-label">M-Pesa Transaction</label>
               <input type="hidden" name="mpesa_receipt_number" id="mpesa_receipt_number" value="">
-              <button type="button" id="stk-btn" class="btn btn-success btn-sm w-100 mb-1"><i class="bi bi-phone-vibrate me-1"></i>Send STK Push to customer</button>
-              <div id="stk-status" class="cc-stk-status" hidden></div>
-              <div class="cc-stk-or">or find a Paybill payment</div>
               <div class="d-flex gap-2">
                 <div class="cc-search-wrap flex-grow-1">
                   <i class="bi bi-search cc-search-icon"></i>

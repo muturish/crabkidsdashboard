@@ -667,12 +667,12 @@ body {
 .cc-filter-search { width: 115px; }
 @media (max-width: 575px) { .cc-stat + .cc-stat { border-left: none; border-top: 1px solid #f1f5f9; } .cc-filter-search { width: 100%; } }
 
-/* New order: STK push */
-.cc-stk-status { font-size: 0.75rem; border-radius: 7px; padding: 0.4rem 0.6rem; margin-bottom: 0.25rem; }
-.cc-stk-wait { background: #eff6ff; color: #1d4ed8; }
-.cc-stk-ok   { background: #ecfdf5; color: #047857; }
-.cc-stk-fail { background: #fef2f2; color: #b91c1c; }
-.cc-stk-or { text-align: center; font-size: 0.7rem; color: #94a3b8; margin: 0.35rem 0; }
+/* Longer M-Pesa notes (match / amount check / order details) wrap inside narrow columns */
+#mpesa-match .ck-chip, #mpesa-amount-check .ck-chip, .cc-kv dd .ck-chip {
+  white-space: normal; max-width: 100%; overflow-wrap: anywhere;
+  align-items: flex-start; border-radius: 8px; line-height: 1.35; padding: 3px 8px;
+}
+#mpesa-match .ck-chip i, #mpesa-amount-check .ck-chip i, .cc-kv dd .ck-chip i { margin-top: 1px; }
 
 /* New order: Delivery & Payment card -- tighter spacing, labels kept */
 .cc-pay-card .card-header { padding-top: 0.6rem; padding-bottom: 0.6rem; }
