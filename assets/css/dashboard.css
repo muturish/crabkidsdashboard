@@ -667,6 +667,13 @@ body {
 .cc-filter-search { width: 115px; }
 @media (max-width: 575px) { .cc-stat + .cc-stat { border-left: none; border-top: 1px solid #f1f5f9; } .cc-filter-search { width: 100%; } }
 
+/* New order: STK push */
+.cc-stk-status { font-size: 0.75rem; border-radius: 7px; padding: 0.4rem 0.6rem; margin-bottom: 0.25rem; }
+.cc-stk-wait { background: #eff6ff; color: #1d4ed8; }
+.cc-stk-ok   { background: #ecfdf5; color: #047857; }
+.cc-stk-fail { background: #fef2f2; color: #b91c1c; }
+.cc-stk-or { text-align: center; font-size: 0.7rem; color: #94a3b8; margin: 0.35rem 0; }
+
 /* New order: Delivery & Payment card -- tighter spacing, labels kept */
 .cc-pay-card .card-header { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 .cc-pay-card .card-body { padding: 0.8rem 1rem; }

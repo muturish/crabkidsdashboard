@@ -979,6 +979,62 @@ function find_call_center_order_by_mpesa(string $receipt_number): ?array
     return $st->fetch() ?: null;
 }
 
+// ── M-Pesa STK push (through the POS) ────────────────────────────────────────
+//
+// The call center form asks the POS to send the payment prompt: the POS's
+// /mpesa/stkpush uses its own Daraja credentials, saves a pending row in
+// mpesa_transactions keyed by checkout_request_id, and its Safaricom callback
+// later marks that row success/failed with the receipt number. The dashboard
+// only reads that row back (get_stk_status) -- it never talks to Safaricom.
+
+// Normalises Kenyan mobile numbers to 2547XXXXXXXX / 2541XXXXXXXX, or null.
+function normalize_ke_phone(string $phone): ?string
+{
+    $d = preg_replace('/\D+/', '', $phone);
+    if (preg_match('/^0([17]\d{8})$/', $d, $m))   return '254' . $m[1];
+    if (preg_match('/^254([17]\d{8})$/', $d, $m)) return '254' . $m[1];
+    if (preg_match('/^([17]\d{8})$/', $d, $m))    return '254' . $m[1];
+    return null;
+}
+
+// Returns ['checkout_request_id' => ...] or throws with a readable message.
+function pos_stk_push(string $phone, int $amount): array
+{
+    $base = rtrim(getenv('POS_BASE_URL') ?: 'https://pos.crabkidskenya.co.ke', '/');
+    $ch = curl_init($base . '/mpesa/stkpush');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query(['phone' => $phone, 'amount' => $amount]),
+        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT        => 45,
+    ]);
+    $body = curl_exec($ch);
+    $err  = curl_error($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($body === false) throw new Exception('Could not reach the POS to send the M-Pesa prompt (' . $err . ').');
+    $data = json_decode($body, true);
+    if (!is_array($data)) throw new Exception('The POS gave an unexpected response (HTTP ' . $code . ').');
+    if (empty($data['success']) || empty($data['checkoutRequestID'])) {
+        throw new Exception('M-Pesa prompt not sent: ' . ($data['message'] ?? 'unknown error') . '.');
+    }
+    return ['checkout_request_id' => (string)$data['checkoutRequestID']];
+}
+
+function get_stk_status(string $checkout_request_id): ?array
+{
+    $st = get_db()->prepare("
+        SELECT status, receipt_number, amount, first_name, result_desc
+        FROM mpesa_transactions WHERE checkout_request_id = :c
+        ORDER BY id DESC LIMIT 1
+    ");
+    $st->execute([':c' => $checkout_request_id]);
+    return $st->fetch() ?: null;
+}
+
 // ── Transactions report (sales, payment method, M-Pesa reconciliation) ────────
 
 // Reads the business's own configured payment method labels (e.g. custom_pay_1
