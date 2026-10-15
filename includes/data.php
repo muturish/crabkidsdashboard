@@ -1104,11 +1104,11 @@ function get_sales_payment_summary(string $from, string $to, ?string $method = n
 // ── Call Center Orders (call_centre_orders table in the POS database) ────────
 //
 // Stored in `call_centre_orders`, a table that already exists in the POS
-// database (customer_name, customer_phone, delivery_address, item,
+// database (customer_name, customer_phone, delivery_address,
 // mode_of_delivery, mode_of_payment, notes). The dashboard extends it with
 // the extra columns it needs and keeps line items in call_centre_order_items.
-// `item` is still filled with a plain-text summary of the products so
-// anything else reading the original columns keeps working.
+// The original `item` text column is dropped -- products live only in
+// call_centre_order_items.
 //
 // These orders never touch Ultimate POS's own transactions/stock tables --
 // its FIFO purchase-allocation logic is too fragile to write into directly
@@ -1137,7 +1137,6 @@ function ensure_call_center_orders_table(): void
             customer_name VARCHAR(255) NOT NULL,
             customer_phone VARCHAR(30) NOT NULL,
             delivery_address TEXT NULL,
-            item TEXT NOT NULL,
             mode_of_delivery VARCHAR(100) NULL,
             mode_of_payment VARCHAR(100) NULL,
             notes TEXT NULL,
@@ -1169,6 +1168,11 @@ function ensure_call_center_orders_table(): void
             $db->exec("ALTER TABLE call_centre_orders ADD COLUMN $col $def");
         }
     }
+    // The original table's `item` column (NOT NULL, no default) is no longer
+    // used -- drop it, or inserts that leave it out would fail.
+    if (in_array('item', $cols, true)) {
+        $db->exec("ALTER TABLE call_centre_orders DROP COLUMN item");
+    }
     $keys = $db->query("SHOW INDEX FROM call_centre_orders")->fetchAll(PDO::FETCH_COLUMN, 2);
     if (!in_array('order_no', $keys, true))     $db->exec("ALTER TABLE call_centre_orders ADD UNIQUE KEY order_no (order_no)");
     if (!in_array('business_id', $keys, true))  $db->exec("ALTER TABLE call_centre_orders ADD KEY business_id (business_id)");
@@ -1198,18 +1202,6 @@ function ensure_call_center_orders_table(): void
     ");
 
     $done = true;
-}
-
-// Plain-text summary for the base table's `item` column,
-// e.g. "2 x P617629 Size 31-36 (31) @ 3,500; 1 x Socks @ 300".
-function call_center_items_summary(array $items): string
-{
-    $parts = [];
-    foreach ($items as $it) {
-        $name = $it['product_name'] . (!empty($it['variation_name']) ? ' (' . $it['variation_name'] . ')' : '');
-        $parts[] = max(1, (int)$it['quantity']) . ' x ' . $name . ' @ ' . number_format((float)$it['unit_price']);
-    }
-    return implode('; ', $parts);
 }
 
 // Product/variation grid for the call-center order builder (POS-style product
@@ -1281,10 +1273,10 @@ function create_call_center_order(array $order, array $items): array
     try {
         $st = $db->prepare("
             INSERT INTO call_centre_orders
-                (business_id, order_no, customer_name, customer_phone, delivery_address, item,
+                (business_id, order_no, customer_name, customer_phone, delivery_address,
                  mode_of_delivery, payment_status, mode_of_payment, mpesa_receipt_number, order_status,
                  subtotal_amount, discount_amount, shipping_amount, total_amount, agent_name, notes)
-            VALUES (:bid, NULL, :name, :phone, :address, :item, :dm, :ps, :pm, :mpesa, 'pending', :subtotal, :discount,
+            VALUES (:bid, NULL, :name, :phone, :address, :dm, :ps, :pm, :mpesa, 'pending', :subtotal, :discount,
                  :shipping, :total, :agent, :notes)
         ");
         $st->execute([
@@ -1292,7 +1284,6 @@ function create_call_center_order(array $order, array $items): array
             ':name'     => $order['customer_name'],
             ':phone'    => $order['customer_phone'],
             ':address'  => $order['customer_address'] ?: null,
-            ':item'     => call_center_items_summary($items),
             ':dm'       => $order['delivery_method'],
             ':ps'       => $order['payment_status'],
             ':pm'       => $order['payment_status'] === 'paid' ? ($order['payment_method'] ?? null) : null,
