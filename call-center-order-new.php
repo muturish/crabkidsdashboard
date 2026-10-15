@@ -445,22 +445,28 @@ require_once __DIR__ . '/includes/header.php';
     <div class="col-lg-8">
 
       <div class="card mb-3">
-        <div class="card-header d-flex align-items-center gap-2">
-          <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-blue"><i class="bi bi-person"></i></span>Customer</h6>
-        </div>
-        <div class="card-body">
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label ck-kpi-label">Customer Name</label>
-              <input type="text" name="customer_name" class="form-control" placeholder="e.g. Jane Wanjiru" required value="<?= htmlspecialchars($_POST['customer_name'] ?? '') ?>">
+        <div class="card-body cc-customer-bar">
+          <div class="row g-2 align-items-center">
+            <div class="col-12 col-xl-auto">
+              <span class="cc-customer-title"><span class="ck-ci ck-ci-blue"><i class="bi bi-person"></i></span>Customer</span>
             </div>
-            <div class="col-md-6">
-              <label class="form-label ck-kpi-label">Phone Number</label>
-              <input type="text" name="customer_phone" class="form-control" placeholder="e.g. 0712 345 678" required value="<?= htmlspecialchars($_POST['customer_phone'] ?? '') ?>">
+            <div class="col-md-4 col-xl-3">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                <input type="text" name="customer_name" class="form-control" placeholder="Name" aria-label="Customer name" title="Customer name" required value="<?= htmlspecialchars($_POST['customer_name'] ?? '') ?>">
+              </div>
             </div>
-            <div class="col-12">
-              <label class="form-label ck-kpi-label">Delivery Address <span class="text-muted fw-normal">(optional)</span></label>
-              <input type="text" name="customer_address" class="form-control" placeholder="Where should this be delivered?" value="<?= htmlspecialchars($_POST['customer_address'] ?? '') ?>">
+            <div class="col-md-3 col-xl-3">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                <input type="tel" name="customer_phone" class="form-control" placeholder="Phone" aria-label="Phone number" title="Phone number" required value="<?= htmlspecialchars($_POST['customer_phone'] ?? '') ?>">
+              </div>
+            </div>
+            <div class="col-md-5 col-xl">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
+                <input type="text" name="customer_address" class="form-control" placeholder="Address (optional)" aria-label="Delivery address (optional)" title="Delivery address (optional)" value="<?= htmlspecialchars($_POST['customer_address'] ?? '') ?>">
+              </div>
             </div>
           </div>
         </div>

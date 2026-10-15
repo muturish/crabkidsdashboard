@@ -600,6 +600,9 @@ body {
 .cc-qty-btn:hover { background: #eff6ff; }
 .cc-qty-btn:disabled { opacity: 0.35; cursor: not-allowed; background: transparent; }
 .cc-cart-stock-max { color: #dc2626; font-weight: 600; }
+.cc-customer-bar { padding: 0.6rem 0.75rem; }
+.cc-customer-title { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.85rem; color: #0f172a; white-space: nowrap; }
+.cc-customer-bar .input-group-text { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
 .cc-qty-val {
   width: 42px; text-align: center; border: none; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;
   height: 32px; font-size: 0.85rem; font-weight: 700; -moz-appearance: textfield;
