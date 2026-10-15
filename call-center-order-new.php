@@ -397,6 +397,7 @@ $inline_scripts = <<<'JS'
   function syncDeliveryRule(){
     var isParcel = deliverySelect.value === 'parcel';
     podOption.disabled = isParcel;
+    document.getElementById('parcel-hint').hidden = !isParcel;
     if (isParcel && paymentStatusSelect.value !== 'paid') paymentStatusSelect.value = 'paid';
     syncPaymentMethod();
   }
@@ -494,49 +495,51 @@ require_once __DIR__ . '/includes/header.php';
     <div class="col-lg-4">
       <div class="cc-summary">
         <div class="card mb-3">
-          <div class="card-header d-flex align-items-center gap-2">
-            <h6 class="mb-0 fw-bold d-flex align-items-center gap-2 fs-6"><span class="ck-ci ck-ci-orange"><i class="bi bi-truck"></i></span>Delivery &amp; Payment</h6>
-          </div>
-          <div class="card-body">
-            <label class="form-label ck-kpi-label">Mode of Delivery</label>
-            <select name="delivery_method" id="delivery_method" class="form-select mb-1" required>
-              <option value="" selected disabled>Select mode of delivery…</option>
-              <option value="delivery">Delivery</option>
-              <option value="parcel">Parcel</option>
-            </select>
-            <small class="text-muted d-block mb-3">Parcel orders must be paid upfront -- M-Pesa is the only payment method accepted.</small>
-
-            <label class="form-label ck-kpi-label">Payment Status</label>
-            <select name="payment_status" id="payment_status" class="form-select mb-3" required>
-              <option value="" selected disabled>Select payment status…</option>
-              <option value="pod" id="ps-pod-option">Payment on Delivery</option>
-              <option value="paid">Paid</option>
-            </select>
-
-            <div id="payment-method-wrap" hidden class="mb-3">
-              <label class="form-label ck-kpi-label">Payment Method</label>
-              <select name="payment_method" id="payment_method" class="form-select mb-2">
-                <option value="" selected disabled>Select payment method…</option>
-                <?php foreach ($payment_methods as $key => $label): ?>
-                  <option value="<?= htmlspecialchars($key) ?>"><?= htmlspecialchars($label) ?></option>
-                <?php endforeach; ?>
+          <div class="card-body cc-pay-bar">
+            <div class="input-group input-group-sm" title="Mode of delivery">
+              <span class="input-group-text"><i class="bi bi-truck"></i></span>
+              <select name="delivery_method" id="delivery_method" class="form-select" aria-label="Mode of delivery" required>
+                <option value="" selected disabled>Mode of delivery…</option>
+                <option value="delivery">Delivery</option>
+                <option value="parcel">Parcel</option>
               </select>
+            </div>
+            <small id="parcel-hint" class="cc-pay-hint" hidden><i class="bi bi-info-circle me-1"></i>Parcel orders must be paid upfront via M-Pesa.</small>
 
-              <label class="form-label ck-kpi-label">M-Pesa Transaction</label>
+            <div class="input-group input-group-sm mt-2" title="Payment status">
+              <span class="input-group-text"><i class="bi bi-cash-coin"></i></span>
+              <select name="payment_status" id="payment_status" class="form-select" aria-label="Payment status" required>
+                <option value="" selected disabled>Payment status…</option>
+                <option value="pod" id="ps-pod-option">Payment on Delivery</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+
+            <div id="payment-method-wrap" hidden class="mt-2">
+              <?php // Only one method (M-Pesa) -- keep the field but don't show it; it is set automatically when Paid is chosen. ?>
+              <div class="input-group input-group-sm mb-2<?= count($payment_methods) <= 1 ? ' d-none' : '' ?>" title="Payment method">
+                <span class="input-group-text"><i class="bi bi-wallet2"></i></span>
+                <select name="payment_method" id="payment_method" class="form-select" aria-label="Payment method">
+                  <option value="" selected disabled>Payment method…</option>
+                  <?php foreach ($payment_methods as $key => $label): ?>
+                    <option value="<?= htmlspecialchars($key) ?>"><?= htmlspecialchars($label) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+
               <input type="hidden" name="mpesa_receipt_number" id="mpesa_receipt_number" value="">
               <div class="d-flex gap-2">
                 <div class="cc-search-wrap flex-grow-1">
-                  <i class="bi bi-search cc-search-icon"></i>
-                  <input type="text" id="mpesa-search" class="form-control cc-search-input" placeholder="Search by M-Pesa code, phone, or name…" autocomplete="off">
+                  <i class="bi bi-phone cc-search-icon"></i>
+                  <input type="text" id="mpesa-search" class="form-control form-control-sm cc-search-input" placeholder="M-Pesa code, phone or name" aria-label="M-Pesa transaction" title="M-Pesa transaction" autocomplete="off">
                   <div id="mpesa-results" class="cc-search-results" hidden></div>
                 </div>
-                <button type="button" class="btn btn-ck-ghost" data-bs-toggle="modal" data-bs-target="#mpesaModal" title="Browse M-Pesa transactions"><i class="bi bi-list-ul"></i></button>
+                <button type="button" class="btn btn-ck-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#mpesaModal" title="Browse M-Pesa transactions"><i class="bi bi-list-ul"></i></button>
               </div>
               <div id="mpesa-match" class="mt-2" hidden></div>
             </div>
 
-            <label class="form-label ck-kpi-label">Notes <span class="text-muted fw-normal">(optional)</span></label>
-            <textarea name="notes" class="form-control" rows="2" placeholder="Anything the fulfilling team should know"><?= htmlspecialchars($_POST['notes'] ?? '') ?></textarea>
+            <textarea name="notes" class="form-control form-control-sm mt-2" rows="2" placeholder="Notes (optional)" aria-label="Notes (optional)"><?= htmlspecialchars($_POST['notes'] ?? '') ?></textarea>
           </div>
         </div>
 
