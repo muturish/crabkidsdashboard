@@ -598,6 +598,8 @@ body {
   font-size: 1rem; font-weight: 700; cursor: pointer; line-height: 1;
 }
 .cc-qty-btn:hover { background: #eff6ff; }
+.cc-qty-btn:disabled { opacity: 0.35; cursor: not-allowed; background: transparent; }
+.cc-cart-stock-max { color: #dc2626; font-weight: 600; }
 .cc-qty-val {
   width: 42px; text-align: center; border: none; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;
   height: 32px; font-size: 0.85rem; font-weight: 700; -moz-appearance: textfield;

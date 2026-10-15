@@ -136,34 +136,54 @@ $inline_scripts = <<<'JS'
   function renderCart(){
     cartList.innerHTML = '';
     cartEmpty.hidden = cart.length > 0;
-    cart.forEach(function(item, idx){
+    cart.forEach(function(item){
+      var max = Math.max(1, Math.floor(item.stock || 1));
       var row = document.createElement('div');
       row.className = 'cc-cart-row';
       row.innerHTML =
         '<div class="cc-cart-info">' +
           '<div class="cc-cart-name">' + escapeHtml(item.product_name) + (item.variation_name ? ' <span class="cc-cart-var">' + escapeHtml(item.variation_name) + '</span>' : '') + '</div>' +
-          '<div class="cc-cart-price">' + fmt(item.unit_price) + ' each</div>' +
+          '<div class="cc-cart-price">' + fmt(item.unit_price) + ' each &middot; <span class="cc-cart-stock">' + max + ' in stock</span></div>' +
         '</div>' +
         '<div class="cc-qty">' +
           '<button type="button" class="cc-qty-btn minus" aria-label="Decrease">&minus;</button>' +
-          '<input type="number" min="1" max="' + item.stock + '" class="cc-qty-val" value="' + item.quantity + '">' +
+          '<input type="number" min="1" max="' + max + '" step="1" class="cc-qty-val" value="' + item.quantity + '">' +
           '<button type="button" class="cc-qty-btn plus" aria-label="Increase">+</button>' +
         '</div>' +
         '<div class="cc-cart-total">' + fmt(item.quantity * item.unit_price) + '</div>' +
         '<button type="button" class="cc-cart-remove" aria-label="Remove"><i class="bi bi-trash"></i></button>';
 
       var qtyInput = row.querySelector('.cc-qty-val');
-      function setQty(q){
-        var max = item.stock || 1;
-        cart[idx].quantity = Math.min(max, Math.max(1, q));
-        renderCart();
+      var minusBtn = row.querySelector('.minus');
+      var plusBtn  = row.querySelector('.plus');
+      var totalEl  = row.querySelector('.cc-cart-total');
+      var stockEl  = row.querySelector('.cc-cart-stock');
+
+      // Updates this row in place (no full re-render, so typing keeps focus).
+      // Quantity is kept between 1 and the stock on hand.
+      function setQty(q, keepTyping){
+        var clamped = Math.min(max, Math.max(1, q));
+        item.quantity = clamped;
+        if (!keepTyping || clamped !== q) qtyInput.value = clamped;
+        minusBtn.disabled = clamped <= 1;
+        plusBtn.disabled  = clamped >= max;
+        stockEl.textContent = clamped >= max ? 'max ' + max + ' in stock' : max + ' in stock';
+        stockEl.classList.toggle('cc-cart-stock-max', clamped >= max);
+        totalEl.textContent = fmt(clamped * item.unit_price);
+        computeTotals();
       }
-      row.querySelector('.minus').addEventListener('click', function(){ setQty(item.quantity - 1); });
-      row.querySelector('.plus').addEventListener('click', function(){ setQty(item.quantity + 1); });
-      qtyInput.addEventListener('input', function(){ setQty(parseInt(this.value, 10) || 1); });
-      row.querySelector('.cc-cart-remove').addEventListener('click', function(){ cart.splice(idx, 1); renderCart(); });
+      minusBtn.addEventListener('click', function(){ setQty(item.quantity - 1); });
+      plusBtn.addEventListener('click', function(){ setQty(item.quantity + 1); });
+      qtyInput.addEventListener('input', function(){
+        var q = parseInt(this.value, 10);
+        if (!isNaN(q)) setQty(q, true); // empty while typing: wait for the next key
+      });
+      qtyInput.addEventListener('blur', function(){ setQty(parseInt(this.value, 10) || item.quantity); });
+      qtyInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); this.blur(); } });
+      row.querySelector('.cc-cart-remove').addEventListener('click', function(){ cart.splice(cart.indexOf(item), 1); renderCart(); });
 
       cartList.appendChild(row);
+      setQty(item.quantity);
     });
     computeTotals();
   }
