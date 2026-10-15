@@ -1384,12 +1384,14 @@ function get_call_center_order_stats(?string $from = null, ?string $to = null): 
             COALESCE(SUM(total_amount), 0) AS total_value,
             COALESCE(SUM(CASE WHEN order_status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_count,
             COALESCE(SUM(CASE WHEN payment_status = 'pod' AND order_status != 'cancelled' THEN 1 ELSE 0 END), 0) AS pod_count,
-            COALESCE(SUM(CASE WHEN payment_status = 'pod' AND order_status != 'cancelled' THEN total_amount ELSE 0 END), 0) AS pod_value
+            COALESCE(SUM(CASE WHEN payment_status = 'pod' AND order_status != 'cancelled' THEN total_amount ELSE 0 END), 0) AS pod_value,
+            COALESCE(SUM(CASE WHEN payment_status = 'paid' AND order_status != 'cancelled' THEN 1 ELSE 0 END), 0) AS paid_count,
+            COALESCE(SUM(CASE WHEN payment_status = 'paid' AND order_status != 'cancelled' THEN total_amount ELSE 0 END), 0) AS paid_value
         FROM call_centre_orders
         WHERE " . implode(' AND ', $where) . "
     ");
     $st->execute($params);
-    return $st->fetch() ?: ['total_orders' => 0, 'total_value' => 0, 'pending_count' => 0, 'pod_count' => 0, 'pod_value' => 0];
+    return $st->fetch() ?: ['total_orders' => 0, 'total_value' => 0, 'pending_count' => 0, 'pod_count' => 0, 'pod_value' => 0, 'paid_count' => 0, 'paid_value' => 0];
 }
 
 function get_call_center_order(int $id): ?array

@@ -24,7 +24,7 @@ try {
 } catch (Exception $e) {
     $db_error = $e->getMessage();
     $orders   = [];
-    $stats    = ['total_orders' => 0, 'total_value' => 0, 'pending_count' => 0, 'pod_count' => 0, 'pod_value' => 0];
+    $stats    = ['total_orders' => 0, 'total_value' => 0, 'pending_count' => 0, 'pod_count' => 0, 'pod_value' => 0, 'paid_count' => 0, 'paid_value' => 0];
 }
 
 $created = isset($_GET['created']) ? (string)$_GET['created'] : null;
@@ -61,6 +61,10 @@ require_once __DIR__ . '/includes/header.php';
   <div class="cc-stat">
     <span class="cc-stat-icon cc-stat-slate"><i class="bi bi-cash-coin"></i></span>
     <div><div class="cc-stat-label">Payment on Delivery</div><div class="cc-stat-val"><?= number_format($stats['pod_count']) ?> <small>KES <?= number_format($stats['pod_value']) ?> to collect</small></div></div>
+  </div>
+  <div class="cc-stat">
+    <span class="cc-stat-icon cc-stat-green"><i class="bi bi-phone"></i></span>
+    <div><div class="cc-stat-label">M-Pesa Payment</div><div class="cc-stat-val"><?= number_format($stats['paid_count']) ?> <small>KES <?= number_format($stats['paid_value']) ?> received</small></div></div>
   </div>
 </div>
 
