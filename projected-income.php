@@ -335,6 +335,6 @@ require_once __DIR__ . '/includes/header.php';
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="assets/js/projected-income.js" defer></script>
+<script src="assets/js/projected-income.js?v=<?= filemtime(__DIR__ . '/assets/js/projected-income.js') ?>" defer></script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
