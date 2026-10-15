@@ -86,6 +86,12 @@
       Transactions
     </a>
 
+    <a href="call-center-orders.php"
+       class="ck-nav-item <?= in_array(basename($_SERVER['PHP_SELF']), ['call-center-orders.php', 'call-center-order-new.php', 'call-center-order-view.php']) ? 'active' : '' ?>">
+      <span class="ck-nav-icon"><i class="bi bi-headset"></i></span>
+      Call Center Orders
+    </a>
+
     <a href="low-stock.php"
        class="ck-nav-item <?= basename($_SERVER['PHP_SELF']) === 'low-stock.php' ? 'active' : '' ?>">
       <span class="ck-nav-icon"><i class="bi bi-exclamation-triangle"></i></span>

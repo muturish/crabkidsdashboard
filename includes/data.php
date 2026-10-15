@@ -466,7 +466,7 @@ function get_low_stock_items(int $limit = 20, ?int $category_id = null, ?string 
         LEFT JOIN categories c  ON c.id  = p.category_id
         LEFT JOIN categories sc ON sc.id = p.sub_category_id
         WHERE p.alert_quantity IS NOT NULL AND p.alert_quantity > 0 {$extra}
-        GROUP BY v.id
+        GROUP BY v.id, p.id, c.id
         HAVING SUM(vld.qty_available) > 0 AND SUM(vld.qty_available) <= p.alert_quantity
         ORDER BY qty ASC
         LIMIT :lim
@@ -498,7 +498,7 @@ function get_out_of_stock_items(int $limit = 200, ?int $category_id = null, ?str
         LEFT JOIN categories c  ON c.id  = p.category_id
         LEFT JOIN categories sc ON sc.id = p.sub_category_id
         WHERE 1=1 {$extra}
-        GROUP BY v.id
+        GROUP BY v.id, p.id, c.id
         HAVING SUM(vld.qty_available) <= 0
         ORDER BY p.name
         LIMIT :lim
@@ -667,7 +667,7 @@ function get_best_selling_products(
         LEFT JOIN categories c  ON c.id  = p.category_id
         LEFT JOIN categories sc ON sc.id = p.sub_category_id
         WHERE 1=1 {$extra}
-        GROUP BY p.id
+        GROUP BY p.id, b.id, c.id, sc.id
         ORDER BY qty_sold DESC
         LIMIT :lim
     ");
@@ -701,7 +701,7 @@ function get_restock_requirements(float $min_stock = 4, ?int $category_id = null
         LEFT JOIN categories c  ON c.id  = p.category_id
         LEFT JOIN categories sc ON sc.id = p.sub_category_id
         WHERE 1=1 {$extra}
-        GROUP BY v.id
+        GROUP BY v.id, p.id, c.id
         HAVING SUM(vld.qty_available) < :min_stock
         ORDER BY qty ASC
     ");
@@ -905,6 +905,80 @@ function get_latest_mpesa_balance(): ?array
     return $row ?: null;
 }
 
+// Search successful M-Pesa transactions (Daraja callback log) so a call-center
+// order can be matched to the real payment -- by receipt code, phone, or the
+// payer's name as M-Pesa reports it. Only 'success' rows are real payments;
+// 'failed'/'pending' rows are just callback noise, not money received.
+// $q empty returns the most recent successful transactions (for browsing);
+// non-empty filters by receipt code, phone, or payer name.
+function search_mpesa_transactions(string $q = '', int $limit = 10): array
+{
+    $db = get_db();
+    $q  = trim($q);
+    ensure_call_center_orders_table();
+
+    // Only receipts not yet used on a POS sale (transaction_payments.transaction_no
+    // is where Ultimate POS stores the M-Pesa code of each payment). With no
+    // search term the browse list shows just the past 3 days; a search
+    // covers all dates. Receipts already attached to a call center order are
+    // still listed, flagged with used_order_id/used_order_no, so the UI can
+    // say where they were used instead of letting them be picked again.
+    $where  = [
+        "m.status = 'success'",
+        "NOT EXISTS (SELECT 1 FROM transaction_payments tp WHERE tp.transaction_no = m.receipt_number)",
+    ];
+    $params = [':bid' => business_id()];
+    if ($q !== '') {
+        $where[] = '(m.receipt_number LIKE :q OR m.mpesa_number LIKE :q OR m.first_name LIKE :q)';
+        $params[':q'] = '%' . $q . '%';
+    } else {
+        $where[] = 'm.created_at >= NOW() - INTERVAL 3 DAY';
+    }
+
+    $st = $db->prepare("
+        SELECT m.id, m.receipt_number, m.mpesa_number, m.first_name, m.amount, m.created_at,
+               cco.id AS used_order_id, cco.order_no AS used_order_no
+        FROM mpesa_transactions m
+        LEFT JOIN call_centre_orders cco
+               ON cco.mpesa_receipt_number = m.receipt_number COLLATE utf8mb4_general_ci
+              AND cco.business_id = :bid
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY m.created_at DESC
+        LIMIT :lim
+    ");
+    foreach ($params as $k => $v) { $st->bindValue($k, $v); }
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
+}
+
+// Confirms a receipt number picked in the UI is a real, successful M-Pesa
+// payment -- never trust the client's word for what it "matched".
+function find_mpesa_transaction(string $receipt_number): ?array
+{
+    $db = get_db();
+    $st = $db->prepare("SELECT id, receipt_number, mpesa_number, first_name, amount, created_at FROM mpesa_transactions WHERE status = 'success' AND receipt_number = :r LIMIT 1");
+    $st->execute([':r' => $receipt_number]);
+    return $st->fetch() ?: null;
+}
+
+// True if the M-Pesa code has already been recorded against a POS sale payment.
+function mpesa_receipt_used_in_pos(string $receipt_number): bool
+{
+    $st = get_db()->prepare("SELECT 1 FROM transaction_payments WHERE transaction_no = :r LIMIT 1");
+    $st->execute([':r' => $receipt_number]);
+    return (bool)$st->fetchColumn();
+}
+
+// The call center order (id, order_no) an M-Pesa code is already attached to, if any.
+function find_call_center_order_by_mpesa(string $receipt_number): ?array
+{
+    ensure_call_center_orders_table();
+    $st = get_db()->prepare("SELECT id, order_no FROM call_centre_orders WHERE mpesa_receipt_number = :r AND business_id = :bid LIMIT 1");
+    $st->execute([':r' => $receipt_number, ':bid' => business_id()]);
+    return $st->fetch() ?: null;
+}
+
 // ── Transactions report (sales, payment method, M-Pesa reconciliation) ────────
 
 // Reads the business's own configured payment method labels (e.g. custom_pay_1
@@ -941,6 +1015,14 @@ function get_payment_method_labels(): array
         }
     }
     return $defaults;
+}
+
+// Payment method choices for call-center orders. M-Pesa is the only payment
+// method this business accepts for phone/WhatsApp orders, regardless of
+// delivery mode -- so it's the only option, not a POS-configured list.
+function get_call_center_payment_methods(): array
+{
+    return ['mpesa' => 'M-Pesa'];
 }
 
 // One row per payment (not per sale), so split payments show each method and,
@@ -1017,4 +1099,339 @@ function get_sales_payment_summary(string $from, string $to, ?string $method = n
     if ($method) $st->bindValue(':method', $method);
     $st->execute();
     return $st->fetch();
+}
+
+// ── Call Center Orders (call_centre_orders table in the POS database) ────────
+//
+// Stored in `call_centre_orders`, a table that already exists in the POS
+// database (customer_name, customer_phone, delivery_address, item,
+// mode_of_delivery, mode_of_payment, notes). The dashboard extends it with
+// the extra columns it needs and keeps line items in call_centre_order_items.
+// `item` is still filled with a plain-text summary of the products so
+// anything else reading the original columns keeps working.
+//
+// These orders never touch Ultimate POS's own transactions/stock tables --
+// its FIFO purchase-allocation logic is too fragile to write into directly
+// (see this project's long history of "mismatch" stock-integrity fixes).
+// A call-center order is a holding record; a staff member later re-enters
+// it as a real sale inside Ultimate POS itself. Once placed, an order is
+// locked -- only its notes can be edited.
+//
+// The pages use the dashboard's own field names; CC_ORDER_SELECT maps the
+// table's columns onto them.
+
+const CC_ORDER_SELECT = "o.*, o.delivery_address AS customer_address,
+    o.mode_of_delivery AS delivery_method, o.mode_of_payment AS payment_method";
+
+function ensure_call_center_orders_table(): void
+{
+    static $done = false;
+    if ($done) return;
+    $db = get_db();
+
+    // Base table as it exists on the live POS database -- only created here
+    // for installs that don't have it yet.
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS call_centre_orders (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            customer_name VARCHAR(255) NOT NULL,
+            customer_phone VARCHAR(30) NOT NULL,
+            delivery_address TEXT NULL,
+            item TEXT NOT NULL,
+            mode_of_delivery VARCHAR(100) NULL,
+            mode_of_payment VARCHAR(100) NULL,
+            notes TEXT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+
+    // Columns the dashboard adds on top of the base table.
+    $extra = [
+        'business_id'          => "INT UNSIGNED NOT NULL DEFAULT 0 AFTER id",
+        'order_no'             => "VARCHAR(20) NULL AFTER business_id",
+        'payment_status'       => "ENUM('paid','pod') NOT NULL DEFAULT 'pod' AFTER mode_of_payment",
+        'mpesa_receipt_number' => "VARCHAR(50) NULL AFTER payment_status",
+        'order_status'         => "ENUM('pending','converted','cancelled') NOT NULL DEFAULT 'pending' AFTER mpesa_receipt_number",
+        'subtotal_amount'      => "DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER order_status",
+        'discount_amount'      => "DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER subtotal_amount",
+        'shipping_amount'      => "DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER discount_amount",
+        'total_amount'         => "DECIMAL(15,2) NOT NULL DEFAULT 0 AFTER shipping_amount",
+        'agent_name'           => "VARCHAR(100) NULL AFTER total_amount",
+        'notes_updated_at'     => "TIMESTAMP NULL DEFAULT NULL AFTER notes",
+    ];
+    $cols = $db->query("
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'call_centre_orders'
+    ")->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($extra as $col => $def) {
+        if (!in_array($col, $cols, true)) {
+            $db->exec("ALTER TABLE call_centre_orders ADD COLUMN $col $def");
+        }
+    }
+    $keys = $db->query("SHOW INDEX FROM call_centre_orders")->fetchAll(PDO::FETCH_COLUMN, 2);
+    if (!in_array('order_no', $keys, true))     $db->exec("ALTER TABLE call_centre_orders ADD UNIQUE KEY order_no (order_no)");
+    if (!in_array('business_id', $keys, true))  $db->exec("ALTER TABLE call_centre_orders ADD KEY business_id (business_id)");
+    if (!in_array('order_status', $keys, true)) $db->exec("ALTER TABLE call_centre_orders ADD KEY order_status (order_status)");
+    if (!in_array('mpesa_receipt_number', $keys, true)) {
+        // One M-Pesa code per order, enforced by the database so two agents
+        // saving at the same moment can't both use it. Skipped (and retried
+        // next load) if existing rows already share a code.
+        try {
+            $db->exec("ALTER TABLE call_centre_orders ADD UNIQUE KEY mpesa_receipt_number (mpesa_receipt_number)");
+        } catch (PDOException $e) {}
+    }
+
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS call_centre_order_items (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            order_id BIGINT UNSIGNED NOT NULL,
+            variation_id INT UNSIGNED NULL,
+            product_name VARCHAR(191) NOT NULL,
+            variation_name VARCHAR(191) NULL,
+            sku VARCHAR(100) NULL,
+            quantity INT UNSIGNED NOT NULL DEFAULT 1,
+            unit_price DECIMAL(15,2) NOT NULL DEFAULT 0,
+            line_total DECIMAL(15,2) NOT NULL DEFAULT 0,
+            KEY order_id (order_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+
+    $done = true;
+}
+
+// Plain-text summary for the base table's `item` column,
+// e.g. "2 x P617629 Size 31-36 (31) @ 3,500; 1 x Socks @ 300".
+function call_center_items_summary(array $items): string
+{
+    $parts = [];
+    foreach ($items as $it) {
+        $name = $it['product_name'] . (!empty($it['variation_name']) ? ' (' . $it['variation_name'] . ')' : '');
+        $parts[] = max(1, (int)$it['quantity']) . ' x ' . $name . ' @ ' . number_format((float)$it['unit_price']);
+    }
+    return implode('; ', $parts);
+}
+
+// Product/variation grid for the call-center order builder (POS-style product
+// picker). Only the `variations` table holds real size/value names -- never
+// product_variations, which is just the variation *template* (see the Sales
+// by Size fix history). Only shows items with stock on hand somewhere.
+function get_pos_products(?string $q = null, ?int $category_id = null, ?int $brand_id = null, int $limit = 60): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    $q   = trim((string)$q);
+
+    $where  = ['v.deleted_at IS NULL'];
+    $params = [':bid' => $bid];
+
+    if ($q !== '') {
+        $where[] = '(p.name LIKE :q OR v.name LIKE :q OR v.sub_sku LIKE :q)';
+        $params[':q'] = '%' . $q . '%';
+    }
+    if ($category_id) {
+        $where[] = 'p.category_id = :cat';
+        $params[':cat'] = $category_id;
+    }
+    if ($brand_id) {
+        $where[] = 'p.brand_id = :brand';
+        $params[':brand'] = $brand_id;
+    }
+
+    $st = $db->prepare("
+        SELECT v.id AS variation_id, p.name AS product_name, v.name AS variation_name,
+               v.sub_sku AS sku, COALESCE(v.default_sell_price, 0) AS price,
+               COALESCE(SUM(vld.qty_available), 0) AS stock
+        FROM variations v
+        JOIN products p ON p.id = v.product_id AND p.business_id = :bid AND p.is_inactive = 0
+        LEFT JOIN variation_location_details vld ON vld.variation_id = v.id
+        WHERE " . implode(' AND ', $where) . "
+        GROUP BY v.id, p.name, v.name, v.sub_sku, v.default_sell_price
+        HAVING stock > 0
+        ORDER BY p.name, v.name
+        LIMIT :lim
+    ");
+    foreach ($params as $k => $v) { $st->bindValue($k, $v); }
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    return $st->fetchAll();
+}
+
+// $items: list of ['variation_id'=>?int, 'product_name'=>string, 'variation_name'=>?string,
+//                   'sku'=>?string, 'quantity'=>int, 'unit_price'=>float]
+function create_call_center_order(array $order, array $items): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_call_center_orders_table();
+
+    if (empty($items)) {
+        throw new Exception('Order must have at least one item.');
+    }
+
+    $subtotal = 0.0;
+    foreach ($items as $it) {
+        $subtotal += (float)$it['unit_price'] * (int)$it['quantity'];
+    }
+    $discount = max(0, (float)($order['discount_amount'] ?? 0));
+    $shipping = max(0, (float)($order['shipping_amount'] ?? 0));
+    $total    = max(0, $subtotal - $discount + $shipping);
+
+    $db->beginTransaction();
+    try {
+        $st = $db->prepare("
+            INSERT INTO call_centre_orders
+                (business_id, order_no, customer_name, customer_phone, delivery_address, item,
+                 mode_of_delivery, payment_status, mode_of_payment, mpesa_receipt_number, order_status,
+                 subtotal_amount, discount_amount, shipping_amount, total_amount, agent_name, notes)
+            VALUES (:bid, NULL, :name, :phone, :address, :item, :dm, :ps, :pm, :mpesa, 'pending', :subtotal, :discount,
+                 :shipping, :total, :agent, :notes)
+        ");
+        $st->execute([
+            ':bid'      => $bid,
+            ':name'     => $order['customer_name'],
+            ':phone'    => $order['customer_phone'],
+            ':address'  => $order['customer_address'] ?: null,
+            ':item'     => call_center_items_summary($items),
+            ':dm'       => $order['delivery_method'],
+            ':ps'       => $order['payment_status'],
+            ':pm'       => $order['payment_status'] === 'paid' ? ($order['payment_method'] ?? null) : null,
+            ':mpesa'    => $order['payment_method'] === 'mpesa' ? ($order['mpesa_receipt_number'] ?? null) : null,
+            ':subtotal' => $subtotal,
+            ':discount' => $discount,
+            ':shipping' => $shipping,
+            ':total'    => $total,
+            ':agent'   => $order['agent_name'] ?: null,
+            ':notes'   => $order['notes'] ?: null,
+        ]);
+        $id = (int)$db->lastInsertId();
+        $order_no = 'CC-' . str_pad((string)$id, 6, '0', STR_PAD_LEFT);
+        $db->prepare("UPDATE call_centre_orders SET order_no = :no WHERE id = :id")
+           ->execute([':no' => $order_no, ':id' => $id]);
+
+        $ist = $db->prepare("
+            INSERT INTO call_centre_order_items
+                (order_id, variation_id, product_name, variation_name, sku, quantity, unit_price, line_total)
+            VALUES (:oid, :vid, :pname, :vname, :sku, :qty, :price, :ltotal)
+        ");
+        foreach ($items as $it) {
+            $qty   = max(1, (int)$it['quantity']);
+            $price = max(0, (float)$it['unit_price']);
+            $ist->execute([
+                ':oid'    => $id,
+                ':vid'    => $it['variation_id'] ?: null,
+                ':pname'  => $it['product_name'],
+                ':vname'  => $it['variation_name'] ?: null,
+                ':sku'    => $it['sku'] ?: null,
+                ':qty'    => $qty,
+                ':price'  => $price,
+                ':ltotal' => $qty * $price,
+            ]);
+        }
+
+        $db->commit();
+        return ['id' => $id, 'order_no' => $order_no, 'total' => $total];
+    } catch (Exception $e) {
+        $db->rollBack();
+        throw $e;
+    }
+}
+
+function get_call_center_orders(array $filters = [], int $limit = 200): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_call_center_orders_table();
+
+    $where  = ['o.business_id = :bid'];
+    $params = [':bid' => $bid];
+
+    if (!empty($filters['from'])) { $where[] = 'DATE(o.created_at) >= :from'; $params[':from'] = $filters['from']; }
+    if (!empty($filters['to']))   { $where[] = 'DATE(o.created_at) <= :to';   $params[':to']   = $filters['to']; }
+    if (!empty($filters['order_status']))    { $where[] = 'o.order_status = :os';     $params[':os'] = $filters['order_status']; }
+    if (!empty($filters['payment_status']))  { $where[] = 'o.payment_status = :ps';   $params[':ps'] = $filters['payment_status']; }
+    if (!empty($filters['delivery_method'])) { $where[] = 'o.mode_of_delivery = :dm'; $params[':dm'] = $filters['delivery_method']; }
+    if (!empty($filters['search'])) {
+        $where[] = '(o.order_no LIKE :s OR o.customer_name LIKE :s OR o.customer_phone LIKE :s)';
+        $params[':s'] = '%' . $filters['search'] . '%';
+    }
+
+    $sql = "SELECT " . CC_ORDER_SELECT . " FROM call_centre_orders o WHERE " . implode(' AND ', $where) . " ORDER BY o.created_at DESC LIMIT :lim";
+    $st  = $db->prepare($sql);
+    foreach ($params as $k => $v) { $st->bindValue($k, $v); }
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    $rows = $st->fetchAll();
+
+    if ($rows) {
+        $ids  = array_column($rows, 'id');
+        $in   = implode(',', array_fill(0, count($ids), '?'));
+        $cst  = $db->prepare("SELECT order_id, COUNT(*) AS n FROM call_centre_order_items WHERE order_id IN ($in) GROUP BY order_id");
+        $cst->execute($ids);
+        $counts = array_column($cst->fetchAll(), 'n', 'order_id');
+        foreach ($rows as &$r) { $r['item_count'] = $counts[$r['id']] ?? 0; }
+        unset($r);
+    }
+
+    return $rows;
+}
+
+function get_call_center_order_stats(?string $from = null, ?string $to = null): array
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_call_center_orders_table();
+
+    $where  = ['business_id = :bid'];
+    $params = [':bid' => $bid];
+    if ($from) { $where[] = 'DATE(created_at) >= :from'; $params[':from'] = $from; }
+    if ($to)   { $where[] = 'DATE(created_at) <= :to';   $params[':to']   = $to; }
+
+    $st = $db->prepare("
+        SELECT
+            COUNT(*) AS total_orders,
+            COALESCE(SUM(total_amount), 0) AS total_value,
+            COALESCE(SUM(CASE WHEN order_status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_count,
+            COALESCE(SUM(CASE WHEN payment_status = 'pod' AND order_status != 'cancelled' THEN 1 ELSE 0 END), 0) AS pod_count,
+            COALESCE(SUM(CASE WHEN payment_status = 'pod' AND order_status != 'cancelled' THEN total_amount ELSE 0 END), 0) AS pod_value
+        FROM call_centre_orders
+        WHERE " . implode(' AND ', $where) . "
+    ");
+    $st->execute($params);
+    return $st->fetch() ?: ['total_orders' => 0, 'total_value' => 0, 'pending_count' => 0, 'pod_count' => 0, 'pod_value' => 0];
+}
+
+function get_call_center_order(int $id): ?array
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_call_center_orders_table();
+
+    $st = $db->prepare("SELECT " . CC_ORDER_SELECT . " FROM call_centre_orders o WHERE o.id = :id AND o.business_id = :bid");
+    $st->execute([':id' => $id, ':bid' => $bid]);
+    $order = $st->fetch();
+    if (!$order) return null;
+
+    $ist = $db->prepare("SELECT * FROM call_centre_order_items WHERE order_id = :id ORDER BY id");
+    $ist->execute([':id' => $id]);
+    $order['items'] = $ist->fetchAll();
+
+    return $order;
+}
+
+// Orders are locked once placed -- notes are the only field that can change.
+function update_call_center_order_notes(int $id, string $notes): void
+{
+    $db  = get_db();
+    $bid = business_id();
+    ensure_call_center_orders_table();
+
+    // notes_updated_at is stamped only when the text actually changes (MySQL
+    // evaluates SET left to right, so the comparison sees the old notes).
+    $db->prepare("
+        UPDATE call_centre_orders
+        SET notes_updated_at = IF(notes <=> :cmp, notes_updated_at, NOW()),
+            notes = :notes
+        WHERE id = :id AND business_id = :bid
+    ")->execute([':cmp' => $notes !== '' ? $notes : null, ':notes' => $notes !== '' ? $notes : null, ':id' => $id, ':bid' => $bid]);
 }
