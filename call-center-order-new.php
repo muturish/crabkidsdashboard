@@ -157,6 +157,22 @@ $inline_scripts = <<<'JS'
   function checkMpesaAmount(){
     var el = document.getElementById('mpesa-amount-check');
     if (!el) return;
+
+    // Same message the server gives on save, shown live above Create Order,
+    // which stays disabled until the totals agree.
+    var banner = document.getElementById('amount-mismatch-alert');
+    var submitBtn = document.getElementById('create-order-btn');
+    if (mpesaAmountMismatch()) {
+      banner.hidden = false;
+      banner.querySelector('div').textContent = 'The order total (' + fmt(orderTotal) + ') does not match the M-Pesa amount (' +
+        fmt(selectedMpesaAmount) + ') for ' + document.getElementById('mpesa_receipt_number').value +
+        '. Adjust the items, discount or shipping so they match.';
+      submitBtn.disabled = true;
+    } else {
+      banner.hidden = true;
+      submitBtn.disabled = false;
+    }
+
     if (selectedMpesaAmount === null) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
     if (!mpesaAmountMismatch()) {
@@ -655,7 +671,8 @@ require_once __DIR__ . '/includes/header.php';
           </div>
         </div>
 
-        <button type="submit" class="btn btn-primary w-100 btn-lg"><i class="bi bi-check-circle me-1"></i>Create Order</button>
+        <div id="amount-mismatch-alert" class="ck-alert err mb-2" hidden><i class="bi bi-x-circle-fill"></i><div></div></div>
+        <button type="submit" id="create-order-btn" class="btn btn-primary w-100 btn-lg"><i class="bi bi-check-circle me-1"></i>Create Order</button>
         <a href="call-center-orders.php" class="btn btn-ck-ghost w-100 mt-2">Cancel</a>
       </div>
     </div>

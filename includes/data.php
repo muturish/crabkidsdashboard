@@ -998,24 +998,51 @@ function normalize_ke_phone(string $phone): ?string
 }
 
 // Returns ['checkout_request_id' => ...] or throws with a readable message.
+//
+// The dashboard and POS share one server, and many hosts can't connect to
+// their own public IP ("hairpin"), so the request can time out. If the first
+// attempt fails before anything was sent, retry against this machine (or
+// POS_CONNECT_IP) with CURLOPT_RESOLVE -- same hostname, same HTTPS cert.
+// Only connection failures are retried, so a prompt is never sent twice.
 function pos_stk_push(string $phone, int $amount): array
 {
     $base = rtrim(getenv('POS_BASE_URL') ?: 'https://pos.crabkidskenya.co.ke', '/');
-    $ch = curl_init($base . '/mpesa/stkpush');
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query(['phone' => $phone, 'amount' => $amount]),
-        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT        => 45,
-    ]);
-    $body = curl_exec($ch);
-    $err  = curl_error($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    $url  = $base . '/mpesa/stkpush';
+    $host = parse_url($url, PHP_URL_HOST);
+    $port = parse_url($url, PHP_URL_PORT) ?: (parse_url($url, PHP_URL_SCHEME) === 'http' ? 80 : 443);
 
-    if ($body === false) throw new Exception('Could not reach the POS to send the M-Pesa prompt (' . $err . ').');
+    $attempts = [null];
+    foreach (array_unique(array_filter([getenv('POS_CONNECT_IP') ?: null, '127.0.0.1'])) as $ip) {
+        $attempts[] = "$host:$port:$ip";
+    }
+
+    $errors = [];
+    foreach ($attempts as $resolve) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query(['phone' => $phone, 'amount' => $amount]),
+            CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT        => 45,
+        ]);
+        if ($resolve) curl_setopt($ch, CURLOPT_RESOLVE, [$resolve]);
+        $body     = curl_exec($ch);
+        $errno    = curl_errno($ch);
+        $err      = curl_error($ch);
+        $code     = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $uploaded = (float)curl_getinfo($ch, CURLINFO_SIZE_UPLOAD);
+        curl_close($ch);
+
+        if ($body !== false) break;
+        $errors[] = ($resolve ? 'via ' . substr($resolve, strrpos($resolve, ':') + 1) : 'direct') . ': ' . $err;
+        // Anything other than "couldn't connect" might have reached the POS -- don't risk a second prompt.
+        $connect_failed = in_array($errno, [CURLE_COULDNT_CONNECT, CURLE_OPERATION_TIMEDOUT, CURLE_COULDNT_RESOLVE_HOST], true) && $uploaded == 0;
+        if (!$connect_failed) break;
+    }
+
+    if ($body === false) throw new Exception('Could not reach the POS to send the M-Pesa prompt (' . implode('; ', $errors) . ').');
     $data = json_decode($body, true);
     if (!is_array($data)) throw new Exception('The POS gave an unexpected response (HTTP ' . $code . ').');
     if (empty($data['success']) || empty($data['checkoutRequestID'])) {
