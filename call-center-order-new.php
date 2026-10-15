@@ -447,9 +447,6 @@ require_once __DIR__ . '/includes/header.php';
       <div class="card mb-3">
         <div class="card-body cc-customer-bar">
           <div class="row g-2 align-items-center">
-            <div class="col-12 col-xl-auto">
-              <span class="cc-customer-title"><span class="ck-ci ck-ci-blue"><i class="bi bi-person"></i></span>Customer</span>
-            </div>
             <div class="col-md-4 col-xl-3">
               <div class="input-group input-group-sm">
                 <span class="input-group-text"><i class="bi bi-person"></i></span>
