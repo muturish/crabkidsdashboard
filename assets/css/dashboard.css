@@ -602,11 +602,6 @@ body {
 .cc-cart-stock-max { color: #dc2626; font-weight: 600; }
 .cc-customer-bar { padding: 0.6rem 0.75rem; }
 .cc-customer-bar .input-group-text { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
-.cc-pay-bar { padding: 0.75rem; }
-.cc-pay-bar .input-group-text { background: #f8fafc; color: #64748b; border-color: #e2e8f0; width: 2.1rem; justify-content: center; }
-.cc-pay-bar .cc-search-icon { left: 0.7rem; font-size: 0.85rem; }
-.cc-pay-bar .cc-search-input { padding-left: 2rem; }
-.cc-pay-hint { display: block; margin-top: 0.3rem; font-size: 0.72rem; color: #b45309; }
 
 /* Order details page (call-center-order-view.php) -- compact, single screen */
 .cc-view-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.9rem; }
@@ -654,3 +649,10 @@ body {
 .ck-kpi.ck-kpi-compact .ck-kpi-sub:empty { display: none; }
 .cc-view-hint { margin-left: auto; font-weight: 400; font-size: 0.7rem; color: #94a3b8; }
 .cc-view-items td.text-end, .cc-view-items th.text-end, .cc-view-items td.text-center { white-space: nowrap; }
+/* New order: Delivery & Payment card -- tighter spacing, labels kept */
+.cc-pay-card .card-header { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+.cc-pay-card .card-body { padding: 0.8rem 1rem; }
+.cc-pay-card .form-label { margin-bottom: 0.2rem; }
+.cc-pay-note { display: block; margin: 0.2rem 0 0.6rem; font-size: 0.7rem; color: #94a3b8; }
+.cc-pay-card .cc-search-icon { left: 0.7rem; font-size: 0.85rem; }
+.cc-pay-card .cc-search-input { padding-left: 2rem; }
