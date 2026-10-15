@@ -49,67 +49,51 @@ require_once __DIR__ . '/includes/header.php';
   <a href="call-center-order-new.php" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>New Order</a>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-6 col-md-3">
-    <div class="ck-kpi ck-kpi-compact kpi-blue">
-      <div class="ck-kpi-head"><p class="ck-kpi-label">Total Orders</p><span class="ck-kpi-icon"><i class="bi bi-telephone"></i></span></div>
-      <div class="ck-kpi-val sm"><?= number_format($stats['total_orders']) ?></div>
-      <div class="ck-kpi-sub">KES <?= number_format($stats['total_value']) ?> value</div>
-    </div>
+<div class="cc-stats">
+  <div class="cc-stat">
+    <span class="cc-stat-icon cc-stat-blue"><i class="bi bi-telephone"></i></span>
+    <div><div class="cc-stat-label">Total Orders</div><div class="cc-stat-val"><?= number_format($stats['total_orders']) ?> <small>KES <?= number_format($stats['total_value']) ?></small></div></div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="ck-kpi ck-kpi-compact kpi-amber">
-      <div class="ck-kpi-head"><p class="ck-kpi-label">Pending</p><span class="ck-kpi-icon"><i class="bi bi-hourglass-split"></i></span></div>
-      <div class="ck-kpi-val sm"><?= number_format($stats['pending_count']) ?></div>
-      <div class="ck-kpi-sub">not yet converted</div>
-    </div>
+  <div class="cc-stat">
+    <span class="cc-stat-icon cc-stat-amber"><i class="bi bi-hourglass-split"></i></span>
+    <div><div class="cc-stat-label">Pending</div><div class="cc-stat-val"><?= number_format($stats['pending_count']) ?> <small>not yet converted</small></div></div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="ck-kpi ck-kpi-compact kpi-slate">
-      <div class="ck-kpi-head"><p class="ck-kpi-label">Payment on Delivery</p><span class="ck-kpi-icon"><i class="bi bi-cash-coin"></i></span></div>
-      <div class="ck-kpi-val sm"><?= number_format($stats['pod_count']) ?></div>
-      <div class="ck-kpi-sub">KES <?= number_format($stats['pod_value']) ?> to collect</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="ck-kpi ck-kpi-compact kpi-green">
-      <div class="ck-kpi-head"><p class="ck-kpi-label">Date Range</p><span class="ck-kpi-icon"><i class="bi bi-calendar-range"></i></span></div>
-      <div class="ck-kpi-val sm"><?= date('d M', strtotime($from)) ?> – <?= date('d M', strtotime($to)) ?></div>
-      <div class="ck-kpi-sub"><?= date('Y', strtotime($to)) ?></div>
-    </div>
+  <div class="cc-stat">
+    <span class="cc-stat-icon cc-stat-slate"><i class="bi bi-cash-coin"></i></span>
+    <div><div class="cc-stat-label">Payment on Delivery</div><div class="cc-stat-val"><?= number_format($stats['pod_count']) ?> <small>KES <?= number_format($stats['pod_value']) ?> to collect</small></div></div>
   </div>
 </div>
 
-<form id="filterForm" method="GET" action="" class="ck-filter flex-wrap">
-  <div class="ck-date-wrap">
-    <input type="date" id="inp-from" name="from" value="<?= htmlspecialchars($from) ?>">
+<form id="filterForm" method="GET" action="" class="ck-filter cc-filter">
+  <div class="ck-date-wrap" title="Date range">
+    <input type="date" id="inp-from" name="from" value="<?= htmlspecialchars($from) ?>" aria-label="From date">
     <span class="ck-date-sep">→</span>
-    <input type="date" id="inp-to" name="to" value="<?= htmlspecialchars($to) ?>">
+    <input type="date" id="inp-to" name="to" value="<?= htmlspecialchars($to) ?>" aria-label="To date">
   </div>
-  <select name="order_status" class="form-select form-select-sm w-auto">
-    <option value="">All Statuses</option>
-    <option value="pending" <?= $order_status === 'pending' ? 'selected' : '' ?>>Pending</option>
-    <option value="converted" <?= $order_status === 'converted' ? 'selected' : '' ?>>Converted</option>
-    <option value="cancelled" <?= $order_status === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
-  </select>
-  <select name="payment_status" class="form-select form-select-sm w-auto">
-    <option value="">All Payments</option>
-    <option value="paid" <?= $payment_status === 'paid' ? 'selected' : '' ?>>Paid</option>
-    <option value="pod" <?= $payment_status === 'pod' ? 'selected' : '' ?>>Payment on Delivery</option>
-  </select>
-  <select name="delivery_method" class="form-select form-select-sm w-auto">
-    <option value="">All Delivery Modes</option>
-    <option value="delivery" <?= $delivery_method === 'delivery' ? 'selected' : '' ?>>Delivery</option>
-    <option value="parcel" <?= $delivery_method === 'parcel' ? 'selected' : '' ?>>Parcel</option>
-  </select>
-  <input type="text" name="search" class="form-control form-control-sm w-auto" placeholder="Order#, customer, phone" value="<?= htmlspecialchars($search) ?>">
-  <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
   <div class="ck-presets">
     <button type="button" class="ck-p-btn" data-days="7">7D</button>
     <button type="button" class="ck-p-btn" data-days="30">30D</button>
     <button type="button" class="ck-p-btn" data-days="90">90D</button>
   </div>
-  <a href="call-center-orders.php" class="btn btn-ck-ghost btn-sm">Reset</a>
+  <select name="order_status" class="form-select form-select-sm w-auto" aria-label="Order status">
+    <option value="">Status: All</option>
+    <option value="pending" <?= $order_status === 'pending' ? 'selected' : '' ?>>Pending</option>
+    <option value="converted" <?= $order_status === 'converted' ? 'selected' : '' ?>>Converted</option>
+    <option value="cancelled" <?= $order_status === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+  </select>
+  <select name="payment_status" class="form-select form-select-sm w-auto" aria-label="Payment">
+    <option value="">Payment: All</option>
+    <option value="paid" <?= $payment_status === 'paid' ? 'selected' : '' ?>>Paid</option>
+    <option value="pod" <?= $payment_status === 'pod' ? 'selected' : '' ?>>Pay on Delivery</option>
+  </select>
+  <select name="delivery_method" class="form-select form-select-sm w-auto" aria-label="Delivery mode">
+    <option value="">Delivery: All</option>
+    <option value="delivery" <?= $delivery_method === 'delivery' ? 'selected' : '' ?>>Delivery</option>
+    <option value="parcel" <?= $delivery_method === 'parcel' ? 'selected' : '' ?>>Parcel</option>
+  </select>
+  <input type="text" name="search" class="form-control form-control-sm cc-filter-search" placeholder="Search…" aria-label="Search by order#, customer or phone" title="Search by order#, customer or phone" value="<?= htmlspecialchars($search) ?>">
+  <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Apply</button>
+  <a href="call-center-orders.php" class="btn btn-ck-ghost btn-sm" title="Reset filters" aria-label="Reset filters"><i class="bi bi-arrow-counterclockwise"></i></a>
 </form>
 
 <div class="card">

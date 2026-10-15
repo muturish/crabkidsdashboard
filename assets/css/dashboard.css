@@ -649,6 +649,23 @@ body {
 .ck-kpi.ck-kpi-compact .ck-kpi-sub:empty { display: none; }
 .cc-view-hint { margin-left: auto; font-weight: 400; font-size: 0.7rem; color: #94a3b8; }
 .cc-view-items td.text-end, .cc-view-items th.text-end, .cc-view-items td.text-center { white-space: nowrap; }
+/* Call Center Orders list: slim stat strip + compact filter bar */
+.cc-stats { display: flex; flex-wrap: wrap; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 0.6rem; }
+.cc-stat { flex: 1 1 200px; display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem; min-width: 0; }
+.cc-stat + .cc-stat { border-left: 1px solid #f1f5f9; }
+.cc-stat-icon { width: 28px; height: 28px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; font-size: 0.8rem; }
+.cc-stat-blue  { background: #eff6ff; color: #1d4ed8; }
+.cc-stat-amber { background: #fffbeb; color: #d97706; }
+.cc-stat-slate { background: #f1f5f9; color: #475569; }
+.cc-stat-label { font-size: 0.68rem; font-weight: 600; color: #64748b; line-height: 1.2; }
+.cc-stat-val { font-size: 1rem; font-weight: 800; color: #0f172a; line-height: 1.25; white-space: nowrap; }
+.cc-stat-val small { font-size: 0.72rem; font-weight: 500; color: #94a3b8; margin-left: 0.2rem; }
+.ck-filter.cc-filter { padding: 0.5rem 0.75rem; gap: 0.35rem; margin-bottom: 0.75rem; }
+.cc-filter .ck-date-wrap input[type="date"] { min-width: 0; padding: 0.3rem 0.4rem; }
+.cc-filter .ck-p-btn { padding: 0.28rem 0.45rem; }
+.cc-filter-search { width: 115px; }
+@media (max-width: 575px) { .cc-stat + .cc-stat { border-left: none; border-top: 1px solid #f1f5f9; } .cc-filter-search { width: 100%; } }
+
 /* New order: Delivery & Payment card -- tighter spacing, labels kept */
 .cc-pay-card .card-header { padding-top: 0.6rem; padding-bottom: 0.6rem; }
 .cc-pay-card .card-body { padding: 0.8rem 1rem; }
